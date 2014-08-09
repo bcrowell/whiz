@@ -1,0 +1,29 @@
+---
+- stream: ch 2
+  delay: 1
+  chunks:
+  - "o:traffic,foo|bar  ;  baz" # ... for first problem set on this topic
+  - "glub"                      # ... 2nd problem set
+  notes:
+    traffic: "The answer to problem $$ is 42."
+- stream: ch 0
+  delay: 2
+[
+  {
+    "stream": "ch 2",
+    "delay": 1,
+    "chunks": [
+      [
+        [{"o":true},[["traffic"],["foo","bar"]]] , [{},[["baz"]]],
+        [[{},[["glub"]]]]
+      ]
+    ],
+    "notes": {
+      "traffic": "The answer to problem $$ is 42."
+    }
+  },
+  {
+    "stream": "ch 0",
+    "delay": 2
+  }
+]
