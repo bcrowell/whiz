@@ -1,14 +1,15 @@
 #!/usr/bin/ruby
 
-require 'json'
-require 'psych'
-require 'yaml'
-
 # usage:
 #   whiz.rb verb args
 #   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"hw.json","book":"lm"}'
 #   whiz.rb hw_table '{"in_file":"hw.json","out_file":"hw_table.tex","book":"lm"}'
+#   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
 # args are normally a JSON structure, surrounded by ''
+
+require 'json'
+require 'psych'
+require 'yaml'
 
 $label_to_num = {}
 $has_solution = {} # boolean, $has_solution[[7,3]] for ch. 7, #3
@@ -174,8 +175,9 @@ end
 
 def describe_individualization_group(flags,g)
   s = describe_individualization_group_simple(g)
-  if $has_solution[[g[0][0],g[0][1]]] then flags['s']=true end
-  flags.keys.each { |f|
+  fl = flags.clone # don't modify flags for other members of the flag group
+  if $has_solution[[g[0][0],g[0][1]]] then fl['s']=true end
+  fl.keys.each { |f|
     s=s+f unless f=='o'
   }
   return s
@@ -200,14 +202,9 @@ def spaceship_individualization_group(g1,g2)
   return lowest_number_in_individualization_group(g1) <=> lowest_number_in_individualization_group(g2)
 end
 
-def hw_table(args)
-  unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
-  hw = get_json_data_from_file_or_die(args['in_file'])
-
-  unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
-  book = args['book']
-  read_problems_csv(book)
-
+# converts json streams to problem sets
+# has side-effect of reading problems.csv file
+def hw_to_sets(hw,book) 
   sets = []
   stream_starts_at_set = 1
   hw.each { |stream|
@@ -223,6 +220,18 @@ def hw_table(args)
     if sets[set_number].nil? then sets[set_number]=[] end
   }
 
+  read_problems_csv(book)
+
+  return sets
+end
+
+def hw_table(args)
+  unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
+  hw = get_json_data_from_file_or_die(args['in_file'])
+  unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
+  book = args['book']
+  sets = hw_to_sets(hw,book)
+
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   tex = ''
   tex = tex + <<-'TEX'
@@ -233,8 +242,9 @@ def hw_table(args)
   1.upto(sets.length-1) { |set_number|
     set = sets[set_number]
     tex = tex + "\\noindent{\\textbf{Homework #{set_number}}}\\\\\n"
-    count_paper = ''
-    count_online = ''
+    c = points_possible_on_set(set)
+    count_paper = c[[false,false]].to_s+"+"+c[[false,true]].to_s
+    count_online = c[[true,false]].to_s+"+"+c[[true,true]].to_s
     stuff = [[],[]]
     0.upto(1) { |online|
       victims = []
@@ -267,6 +277,53 @@ def hw_table(args)
   }
 end
 
+# used by hw_table() and points_possible_to_csv()
+# returns a hash c that can be indexed into like c[[online,extra_credit]],
+#       where online and extra_credit are booleans
+def points_possible_on_set(set)
+  c = {}
+  [true,false].each { |online|
+    [true,false].each { |extra_credit|
+      c[[online,extra_credit]] = 0
+      set.each { |stream_group|
+        stream_group.each { |flag_group|
+          flags,probs = flag_group
+          is_online = (flags.has_key?("o"))
+          is_extra_credit = (flags.has_key?("*"))
+          if is_online==online && is_extra_credit==extra_credit then
+            probs.each { |g| # g is individualization group
+              c[[online,extra_credit]] += 1 unless $has_solution[[g[0][0],g[0][1]]]
+            }
+          end
+        }
+      } # end loop over stream groups
+    }
+  }
+  return c
+end
+
+def points_possible_to_csv(args)
+  unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
+  hw = get_json_data_from_file_or_die(args['in_file'])
+  unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
+  book = args['book']
+  sets = hw_to_sets(hw,book)
+
+  unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
+
+  csv = "set,paper_or_online,pts,ec\n"
+  1.upto(sets.length-1) { |set_number|
+    set = sets[set_number]
+    c = points_possible_on_set(set)
+    ['p','o'].each { |t|
+      csv = csv + "#{set_number},#{t},#{c[[(t=='o'),false]]},#{c[[(t=='o'),true]]}\n"
+    }
+  }
+  File.open(args['out_file'],'w') { |f|
+    f.print csv
+  }
+end
+
 ################################################################################################
 
 
@@ -278,4 +335,5 @@ $args = parse_json_or_die(ARGV[1])
 
 if $verb=="parse_hw" then parse_hw($args); exit(0) end
 if $verb=="hw_table" then hw_table($args); exit(0) end
+if $verb=="points_possible" then points_possible_to_csv($args); exit(0) end
 fatal_error("unrecognized verb: $verb")
