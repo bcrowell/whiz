@@ -11,6 +11,7 @@ require 'yaml'
 # args are normally a JSON structure, surrounded by ''
 
 $label_to_num = {}
+$has_solution = {} # boolean, $has_solution[[7,3]] for ch. 7, #3
 
 def fatal_error(message)
   $stderr.print "whiz.rb: fatal error: #{message}\n"
@@ -77,9 +78,10 @@ end
 def read_problems_csv(book)
   File.readlines(find_problems_csv(book)).each { |line|
     if line=~/(.*),(.*),(.*),(.*),(.*)/ then
-      b,ch,num,label,soln = [$1,$2,$3,$4,$5]
+      b,ch,num,label,soln = [$1,$2.to_i,$3.to_i,$4,$5.to_i]
       if b==book then
         $label_to_num[label] = [ch,num]
+        $has_solution[[ch,num]] = (soln==1)
       end
    end
   }
@@ -150,6 +152,29 @@ def parse_hw(args)
   }
 end
 
+def describe_prob_and_parts(p)
+  return (p[1].to_s+p[2]).downcase
+end
+
+def describe_individualization_group_simple(g)
+  if g.length==1 then return g[0][0].to_s+'-'+describe_prob_and_parts(g[0]) end
+  all_same_chapter = g.map {|p| p[0]==g[0][0]}.reduce {|a,b| a && b}
+  if all_same_chapter then
+    return g[0][0].to_s+'('+(g.map {|p| describe_prob_and_parts(p)}.join('|'))+')'
+  end
+  if p[0]==1 && p[1]==13 then print "==== #{JSON.generate(p)}\n" end
+  return '('+(g.map {|p| p[0]+'-'+describe_prob_and_parts(p)}.join('|'))+')'
+end
+
+def describe_individualization_group(flags,g)
+  s = describe_individualization_group_simple(g)
+  if $has_solution[[g[0][0],g[0][1]]] then flags['s']=true end
+  flags.keys.each { |f|
+    s=s+f unless f=='o'
+  }
+  return s
+end
+
 def hw_table(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
   hw = get_json_data_from_file_or_die(args['in_file'])
@@ -177,6 +202,7 @@ def hw_table(args)
   tex = ''
   tex = tex + <<-'TEX'
          \documentclass{article}
+         \usepackage[T1]{fontenc} % http://tex.stackexchange.com/questions/1774/how-to-insert-pipe-symbol-in-latex
          \begin{document}
          TEX
   1.upto(sets.length-1) { |set_number|
@@ -192,8 +218,7 @@ def hw_table(args)
           is_online = (flags.has_key?("o"))
           if (is_online && online==1) || (!is_online && online==0) then
             probs.each { |individualization_group|
-              descr = individualization_group.map {|p| p[0]+'-'+p[1]}.join(' ')
-              stuff[online].push(descr)
+              stuff[online].push(describe_individualization_group(flags,individualization_group))
             }
           end
         }
