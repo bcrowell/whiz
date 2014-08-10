@@ -5,7 +5,8 @@
   - "o:traffic/AB,foo|bar  ;  baz" # ... for first problem set on this topic
   - "glub"                      # ... 2nd problem set
   notes:
-    traffic: "The answer to problem $$ is 42."
+    0: "The full statement of the question is in the book, not in Spotter" # 0=chunk number
+    traffic: "The answer to problem $$ is 42." # note only for students assigned that problem
 - stream: ch 0
   delay: 2
 [

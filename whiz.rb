@@ -5,6 +5,8 @@
 #   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"hw.json","book":"lm"}'
 #   whiz.rb hw_table '{"in_file":"hw.json","out_file":"hw_table.tex","book":"lm"}'
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
+#   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb"}'
+#          gb_file can be null string, for fake run with only Joe Blow on roster
 # args are normally a JSON structure, surrounded by ''
 
 require 'json'
@@ -177,11 +179,14 @@ def describe_individualization_group_simple(g)
   return '('+(g.map {|p| p[0]+'-'+describe_prob_and_parts(p)}.join('|'))+')'
 end
 
-def describe_individualization_group(flags,g)
+# format can be plain,tex,html
+def describe_individualization_group(flags,g,format)
   s = describe_individualization_group_simple(g)
   fl = flags.clone # don't modify flags for other members of the flag group
   if $has_solution[[g[0][0],g[0][1]]] then fl['s']=true end
   fl.keys.each { |f|
+    mark = f
+    if f=='c' and format=='tex' then f="$\\int$" end
     s=s+f unless f=='o'
   }
   return s
@@ -265,7 +270,7 @@ def hw_table(args)
       } # end loop over stream groups
       victims.sort {|u,v| spaceship_individualization_group(u[1],v[1])}.each { |v|
         flags,individualization_group = v
-        stuff[online].push(describe_individualization_group(flags,individualization_group))
+        stuff[online].push(describe_individualization_group(flags,individualization_group,'tex'))
       }
     } # end loop over paper and online
     tex = tex + <<-"TEX"
@@ -278,6 +283,90 @@ def hw_table(args)
   tex = tex + "\\end{document}\n"
   File.open(args['out_file'],'w') { |f|
     f.print tex
+  }
+end
+
+# returns a hash whose keys are students' database keys, and whose
+# records are hashes with the keys last, first, class, id_string, and id_int
+# if filename is null string, returns fake roster with only blow_joe, id="0"
+def get_roster_from_opengrade(gb)
+  if gb=='' then
+    return {"blow_joe"=>{"last"=>"Blow","first"=>"Joe","class"=>"","id_string"=>"0","id_int"=>"0"}}
+  end
+  result = {}
+  get_json_data_from_file_or_die(gb)['data']['roster'].each { |key,data|
+    first = ''
+    last = key
+    if key=~/(.*)_(.*)/ then last,first=[$1.capitalize,$2.capitalize] end
+    if data.has_key?('last') then last=data['last'] end
+    if data.has_key?('first') then last=data['first'] end
+    id_string = ''
+    id_int = 0
+    if data.has_key?('id') then id_string=data['id']; id_int=data['id'].to_i end
+    cl = ''
+    if data.has_key?('class') then cl=data['class'] end
+    result[key] = {'last'=>last, 'first'=>first, 'class'=>cl, 'id_string'=>id_string, 'id_int'=>id_int }
+  }
+  return result
+end
+
+# don't use this for tex output if an integral sign is desired for 'c' flag
+def flags_to_string(f)
+  result = ''
+  f.each { |key,value|
+    if value then result=result+key end
+  }
+  return result
+end
+
+# writes a csv file like set,book,ch,num,parts,flags,chunk,student
+# if args['gb_file'] is null string, makes fake roster with only blow_joe
+# book=1 always; nowadays only one book in xml file; OpenGrade wants a book number, which corresponds to a <toc> in the xml file
+def sets_csv(args)
+  unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
+  hw = get_json_data_from_file_or_die(args['in_file'])
+  unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
+  book = args['book']
+  sets = hw_to_sets(hw,book)
+  unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}") end
+  roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
+
+  unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
+  csv = "set,book,ch,num,parts,flags,chunk,student\n" # flags may be *,o,*o
+  stuff = []
+  1.upto(sets.length-1) { |set_number|
+    stuff[set_number] = []
+    set = sets[set_number]
+    victims = []
+    set.each { |stream_group|
+      stream_group.each { |flag_group|
+        flags,probs = flag_group
+        probs.each { |individualization_group|
+          victims.push([flags,individualization_group])
+        }
+      }
+    } # end loop over stream groups
+    victims.sort {|u,v| spaceship_individualization_group(u[1],v[1])}.each { |v|
+      flags,individualization_group = v
+      stuff[set_number].push([flags,individualization_group])
+    }
+  }
+  roster.keys.sort.each { |student| # sort won't always be right, because based on key, not last/first, but we don't care
+    1.upto(sets.length-1) { |set_number|
+      stuff[set_number].each { |fg|
+        flags,individualization_group = fg
+        i = 0 # FIXME -- just assigns the first problem in the group to every student
+        p = individualization_group[i]
+        parts = ''
+        if !(p[2].nil?) then parts = p[2].downcase end
+        f = flags_to_string(flags)
+        # see comments above function for why book is always 1
+        csv = csv + "#{set_number},1,#{p[0]},#{p[1]},#{parts},#{f},,#{student}\n"
+      }
+    }
+  }
+  File.open(args['out_file'],'w') { |f|
+    f.print csv
   }
 end
 
@@ -340,4 +429,5 @@ $args = parse_json_or_die(ARGV[1])
 if $verb=="parse_hw" then parse_hw($args); exit(0) end
 if $verb=="hw_table" then hw_table($args); exit(0) end
 if $verb=="points_possible" then points_possible_to_csv($args); exit(0) end
+if $verb=="sets_csv" then sets_csv($args); exit(0) end
 fatal_error("unrecognized verb: $verb")
