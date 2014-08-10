@@ -77,10 +77,14 @@ end
 ################################################################################################
 
 def read_problems_csv(book)
-  File.readlines(find_problems_csv(book)).each { |line|
+  file = find_problems_csv(book)
+  File.readlines(file).each { |line|
     if line=~/(.*),(.*),(.*),(.*),(.*)/ then
       b,ch,num,label,soln = [$1,$2.to_i,$3.to_i,$4,$5.to_i]
-      if b==book then
+      if b==book && label!="deleted" then
+        if !($label_to_num[label].nil?) then 
+          fatal_error("label #{label} is multiply defined in file #{file} for book #{book}")
+        end
         $label_to_num[label] = [ch,num]
         $has_solution[[ch,num]] = (soln==1)
       end
