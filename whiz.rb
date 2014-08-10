@@ -6,7 +6,8 @@ require 'yaml'
 
 # usage:
 #   whiz.rb verb args
-#   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"bar.json","book":"lm"}'
+#   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"hw.json","book":"lm"}'
+#   whiz.rb hw_table '{"in_file":"hw.json","out_file":"hw_table.tex","book":"lm"}'
 # args are normally a JSON structure, surrounded by ''
 
 $label_to_num = {}
@@ -54,7 +55,14 @@ def slurp_file_with_detailed_error_reporting(file)
   end
 end
 
-# This can read either JSON or YAML (since JSON is a subset of YAML).
+def get_json_data_from_file_or_die(file)
+  r = slurp_file_with_detailed_error_reporting(file)
+  if !(r[1].nil?) then fatal_error(r[0]) end
+  return parse_json_or_die(r[0])
+end
+
+# This can read either JSON or YAML (since JSON is a subset of YAML). If it's JSON, better to use
+# the specific JSON routine.
 def get_yaml_data_from_file_or_die(file)
   parsed = begin
     YAML.load(File.open(file))
@@ -142,6 +150,68 @@ def parse_hw(args)
   }
 end
 
+def hw_table(args)
+  unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
+  hw = get_json_data_from_file_or_die(args['in_file'])
+
+  unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
+  book = args['book']
+  read_problems_csv(book)
+
+  sets = []
+  stream_starts_at_set = 1
+  hw.each { |stream|
+    stream_starts_at_set = stream_starts_at_set+stream["delay"].to_i
+    set_number = stream_starts_at_set
+    stream["chunks"].each { |chunk|
+      if sets[set_number].nil? then sets[set_number]=[] end
+      sets[set_number].push(chunk)
+      set_number = set_number+1
+    }
+  }
+  1.upto(sets.length-1) { |set_number|
+    if sets[set_number].nil? then sets[set_number]=[] end
+  }
+
+  unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
+  tex = ''
+  tex = tex + <<-'TEX'
+         \documentclass{article}
+         \begin{document}
+         TEX
+  1.upto(sets.length-1) { |set_number|
+    set = sets[set_number]
+    tex = tex + "\\noindent{\\textbf{Homework #{set_number}}}\\\\\n"
+    count_paper = ''
+    count_online = ''
+    stuff = [[],[]]
+    0.upto(1) { |online|
+      set.each { |stream_group|
+        stream_group.each { |flag_group|
+          flags,probs = flag_group
+          is_online = (flags.has_key?("o"))
+          if (is_online && online==1) || (!is_online && online==0) then
+            probs.each { |individualization_group|
+              descr = individualization_group.map {|p| p[0]+'-'+p[1]}.join(' ')
+              stuff[online].push(descr)
+            }
+          end
+        }
+      }
+    }
+    tex = tex + <<-"TEX"
+      \\begin{tabular}{p{60mm}p{60mm}}
+      \\emph{paper} #{count_paper} & \\emph{online} #{count_online} \\\\
+      #{stuff[0].join(' ')} & #{stuff[1].join(' ')}
+      \\end{tabular}
+      TEX
+  }
+  tex = tex + "\\end{document}\n"
+  File.open(args['out_file'],'w') { |f|
+    f.print tex
+  }
+end
+
 ################################################################################################
 
 
@@ -152,4 +222,5 @@ $verb = ARGV[0]
 $args = parse_json_or_die(ARGV[1])
 
 if $verb=="parse_hw" then parse_hw($args); exit(0) end
+if $verb=="hw_table" then hw_table($args); exit(0) end
 fatal_error("unrecognized verb: $verb")

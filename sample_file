@@ -1,6 +1,6 @@
 ---
 - stream: ch 2
-  delay: 1
+  delay: 0
   chunks:
   - "o:traffic/AB,foo|bar  ;  baz" # ... for first problem set on this topic
   - "glub"                      # ... 2nd problem set
@@ -11,7 +11,7 @@
 [
   {
     "stream": "ch 2",
-    "delay": 1,
+    "delay": 0,
     "chunks": [
       [
         [{"o":true},[[["2","3","AB"]],[["2","4",""],["2","7",""]]]] , [{},[[...]]],
