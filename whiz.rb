@@ -156,9 +156,15 @@ def describe_prob_and_parts(p)
   return (p[1].to_s+p[2]).downcase
 end
 
+def chapter_of_individualization_group(g)
+  all_same_chapter = g.map {|p| p[0]==g[0][0]}.reduce {|a,b| a && b}
+  if !all_same_chapter then return nil end
+  return g[0][0]
+end
+
 def describe_individualization_group_simple(g)
   if g.length==1 then return g[0][0].to_s+'-'+describe_prob_and_parts(g[0]) end
-  all_same_chapter = g.map {|p| p[0]==g[0][0]}.reduce {|a,b| a && b}
+  all_same_chapter = !(chapter_of_individualization_group(g).nil?)
   if all_same_chapter then
     return g[0][0].to_s+'('+(g.map {|p| describe_prob_and_parts(p)}.join('|'))+')'
   end
@@ -173,6 +179,25 @@ def describe_individualization_group(flags,g)
     s=s+f unless f=='o'
   }
   return s
+end
+
+def lowest_number_in_individualization_group(g)
+  l = 9999
+  g.each { |p|
+    if p[1]<l then l=p[1] end
+  }
+  return l
+end
+
+def spaceship_individualization_group(g1,g2)
+  c1 = chapter_of_individualization_group(g1)
+  c2 = chapter_of_individualization_group(g2)
+  if c1.nil? || c2.nil? then # mixture of different chapters
+    return (describe_individualization_group_simple(g1) <=> describe_individualization_group_simple(g2))
+    # shouldn't happen, but if it does, do something half-way reasonable using string comparison
+  end
+  if c1!=c2 then return c1 <=> c2 end
+  return lowest_number_in_individualization_group(g1) <=> lowest_number_in_individualization_group(g2)
 end
 
 def hw_table(args)
@@ -212,18 +237,23 @@ def hw_table(args)
     count_online = ''
     stuff = [[],[]]
     0.upto(1) { |online|
+      victims = []
       set.each { |stream_group|
         stream_group.each { |flag_group|
           flags,probs = flag_group
           is_online = (flags.has_key?("o"))
           if (is_online && online==1) || (!is_online && online==0) then
             probs.each { |individualization_group|
-              stuff[online].push(describe_individualization_group(flags,individualization_group))
+              victims.push([flags,individualization_group])
             }
           end
         }
+      } # end loop over stream groups
+      victims.sort {|u,v| spaceship_individualization_group(u[1],v[1])}.each { |v|
+        flags,individualization_group = v
+        stuff[online].push(describe_individualization_group(flags,individualization_group))
       }
-    }
+    } # end loop over paper and online
     tex = tex + <<-"TEX"
       \\begin{tabular}{p{60mm}p{60mm}}
       \\emph{paper} #{count_paper} & \\emph{online} #{count_online} \\\\
