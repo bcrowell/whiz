@@ -7,6 +7,13 @@
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
 #   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
+#   optional args for sets_csv:
+#     class ... select only that class; error if some students don't have class set
+#   optional args for points_possible and hw_table:
+#     ec_if ... list of flags (like 'c') that cause a problem to be counted as extra credit
+#   optional args for points_possible and sets_csv:
+#     header ... 0 or 1; default=1=output header for csv file; used so I can concatenate 205 & 210 files
+#     exclude_if ... list of flags that cause a problem not to be assigned
 # args are normally a JSON structure, surrounded by ''
 
 require 'json'
@@ -61,7 +68,7 @@ end
 
 def get_json_data_from_file_or_die(file)
   r = slurp_file_with_detailed_error_reporting(file)
-  if !(r[1].nil?) then fatal_error(r[0]) end
+  if !(r[1].nil?) then fatal_error(r[1]) end
   return parse_json_or_die(r[0])
 end
 
@@ -251,7 +258,7 @@ def hw_table(args)
   1.upto(sets.length-1) { |set_number|
     set = sets[set_number]
     tex = tex + "\\noindent{\\textbf{Homework #{set_number}}}\\\\\n"
-    c = points_possible_on_set(set)
+    c = points_possible_on_set(set,args)
     count_paper = c[[false,false]].to_s+"+"+c[[false,true]].to_s
     count_online = c[[true,false]].to_s+"+"+c[[true,true]].to_s
     stuff = [[],[]]
@@ -288,10 +295,10 @@ end
 
 # returns a hash whose keys are students' database keys, and whose
 # records are hashes with the keys last, first, class, id_string, and id_int
-# if filename is null string, returns fake roster with only blow_joe, id="0"
+# if filename is null string, returns fake roster with only blow_joe, id="0", class="210"
 def get_roster_from_opengrade(gb)
   if gb=='' then
-    return {"blow_joe"=>{"last"=>"Blow","first"=>"Joe","class"=>"","id_string"=>"0","id_int"=>"0"}}
+    return {"blow_joe"=>{"last"=>"Blow","first"=>"Joe","class"=>"210","id_string"=>"0","id_int"=>"0"}}
   end
   result = {}
   get_json_data_from_file_or_die(gb)['data']['roster'].each { |key,data|
@@ -332,7 +339,8 @@ def sets_csv(args)
   roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
-  csv = "set,book,ch,num,parts,flags,chunk,student\n" # flags may be *,o,*o
+  csv = ''
+  csv = "set,book,ch,num,parts,flags,chunk,student\n" unless args.has_key?('header') && args['header']==0
   stuff = []
   1.upto(sets.length-1) { |set_number|
     stuff[set_number] = []
@@ -351,29 +359,45 @@ def sets_csv(args)
       stuff[set_number].push([flags,individualization_group])
     }
   }
+  only_class = args['class'] # can be nil
   roster.keys.sort.each { |student| # sort won't always be right, because based on key, not last/first, but we don't care
-    1.upto(sets.length-1) { |set_number|
-      stuff[set_number].each { |fg|
-        flags,individualization_group = fg
-        i = 0 # FIXME -- just assigns the first problem in the group to every student
-        p = individualization_group[i]
-        parts = ''
-        if !(p[2].nil?) then parts = p[2].downcase end
-        f = flags_to_string(flags)
-        # see comments above function for why book is always 1
-        csv = csv + "#{set_number},1,#{p[0]},#{p[1]},#{parts},#{f},,#{student}\n"
+    if !(only_class.nil?) && (roster[student]["class"].nil? || roster[student]["class"]=='') then
+      fatal_error("class not set in gradebook file for #{student}")
+    end
+    if only_class.nil? || roster[student]["class"]==only_class then
+      1.upto(sets.length-1) { |set_number|
+        stuff[set_number].each { |fg|
+          flags,individualization_group = fg
+          i = 0 # FIXME -- just assigns the first problem in the group to every student
+          p = individualization_group[i]
+          parts = ''
+          if !(p[2].nil?) then parts = p[2].downcase end
+          excluded = flags_contain_letter_in_string(flags,args['exclude_if'])
+          f = flags_to_string(flags)
+          # see comments above function for why book is always 1
+          csv = csv + "#{set_number},1,#{p[0]},#{p[1]},#{parts},#{f},,#{student}\n" unless excluded
+        }
       }
-    }
+    end
   }
   File.open(args['out_file'],'w') { |f|
     f.print csv
   }
 end
 
+def flags_contain_letter_in_string(flags,s)
+  if s.nil? || s=='' then return false end
+  a = s.split('') # array of characters
+  flags.keys.each { |f|
+    if a.include?(f) then return true end
+  }
+  return false
+end
+
 # used by hw_table() and points_possible_to_csv()
 # returns a hash c that can be indexed into like c[[online,extra_credit]],
 #       where online and extra_credit are booleans
-def points_possible_on_set(set)
+def points_possible_on_set(set,args)
   c = {}
   [true,false].each { |online|
     [true,false].each { |extra_credit|
@@ -382,8 +406,9 @@ def points_possible_on_set(set)
         stream_group.each { |flag_group|
           flags,probs = flag_group
           is_online = (flags.has_key?("o"))
-          is_extra_credit = (flags.has_key?("*"))
-          if is_online==online && is_extra_credit==extra_credit then
+          is_extra_credit = (flags.has_key?("*")) || flags_contain_letter_in_string(flags,args['ec_if'])
+          excluded = flags_contain_letter_in_string(flags,args['exclude_if'])
+          if is_online==online && is_extra_credit==extra_credit && !excluded then
             probs.each { |g| # g is individualization group
               c[[online,extra_credit]] += 1 unless $has_solution[[g[0][0],g[0][1]]]
             }
@@ -404,10 +429,11 @@ def points_possible_to_csv(args)
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
 
-  csv = "set,paper_or_online,pts,ec\n"
+  csv = ''
+  csv = "set,paper_or_online,pts,ec\n" unless args.has_key?('header') && args['header']==0
   1.upto(sets.length-1) { |set_number|
     set = sets[set_number]
-    c = points_possible_on_set(set)
+    c = points_possible_on_set(set,args)
     ['p','o'].each { |t|
       csv = csv + "#{set_number},#{t},#{c[[(t=='o'),false]]},#{c[[(t=='o'),true]]}\n"
     }
@@ -425,6 +451,10 @@ if ARGV.length!=2 then
 end
 $verb = ARGV[0]
 $args = parse_json_or_die(ARGV[1])
+
+if !($args["header"].nil?) && $args["header"].class.to_s!="Fixnum" then
+  fatal_error("argument \"header\" must be integer, not #{$args["header"].class}")
+end
 
 if $verb=="parse_hw" then parse_hw($args); exit(0) end
 if $verb=="hw_table" then hw_table($args); exit(0) end
