@@ -96,16 +96,18 @@ def parse_hw_chunk(chunk)
     g = g.split(/,/).map {|x| x.split(/\|/)}
     g.each { |a|
       a.map! { |b|
-        parts = nil
+        parts = ''
         if b=~/(.*)\/(.*)/ then
           b,parts = [$1,$2]
         end
+        label = b
         if $label_to_num.has_key?(b) then 
-          b=$label_to_num[b] 
+          b=$label_to_num[label]
         else
-          $stderr.print "warning: name #{b} not found in problems.csv\n"
+          b=[-1,-1]
+          $stderr.print "warning: name #{label} not found in problems.csv\n"
         end
-        if !(parts.nil?) then b=b+"/"+parts end
+        b.push(parts)
         b
       }
     }
