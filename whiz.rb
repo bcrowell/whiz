@@ -5,7 +5,7 @@
 #   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"hw.json","book":"lm"}'
 #   whiz.rb hw_table '{"in_file":"hw.json","out_file":"hw_table.tex","book":"lm"}'
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
-#   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb"}'
+#   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb","term":"f14"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
 #   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm"}'
 #   optional args for sets_csv:
@@ -17,6 +17,7 @@
 #     exclude_if ... list of flags that cause a problem not to be assigned
 # args are normally a JSON structure, surrounded by ''
 
+require 'digest/md5'
 require 'date'
 require 'json'
 require 'psych'
@@ -192,7 +193,9 @@ def describe_individualization_group_simple(g)
   if g.length==1 then return g[0][0].to_s+'-'+describe_prob_and_parts(g[0]) end
   all_same_chapter = !(chapter_of_individualization_group(g).nil?)
   if all_same_chapter then
-    return g[0][0].to_s+'('+(g.map {|p| describe_prob_and_parts(p)}.join('|'))+')'
+    u = g.clone
+    u = u.sort {|a,b| a[1].to_i <=> b[1].to_i}
+    return g[0][0].to_s+'('+(u.map {|p| describe_prob_and_parts(p)}.join('|'))+')'
   end
   if p[0]==1 && p[1]==13 then print "==== #{JSON.generate(p)}\n" end
   return '('+(g.map {|p| p[0]+'-'+describe_prob_and_parts(p)}.join('|'))+')'
@@ -405,6 +408,38 @@ def flags_to_string(f)
   return result
 end
 
+# Returns a number from 0 to n-1, where n is the length of the array probs.
+# Result depends on order of problems; don't worry about sorting this so it's more canonical, since that
+#             would be a mess to do correctly and would give no benefits.
+# This is also implemented in javascript code, in a function of the same name, embedded in whiz.eb.
+# Student ID is treated as a string, so don't convert it to int before passing it in (would lose leading zeroes).
+# It doesn't matter whether year is passed as fixnum or string, because it gets converted to fixnum.
+def select_using_hash(chapter,probs,year,semester,student_id)
+  # year = 2014, etc.; semester = "s" or "f"
+  chapter = chapter.to_s
+  year = year.to_i
+  semester = semester.to_s
+  student_id = student_id.to_s
+  # figure out an integer for the semester, counting from spring 2014 = 0
+  s = (year-2014)*2;
+  if semester=="f" then s=s+1 end
+  x = student_id+","+chapter+","+probs.join(":")
+  hash = md5_hash_hex(x); # 32 hex digits
+  hex4 = hash.to_s[-4..-1]
+  k = hex4.to_i(16) # convert hex string to fixnum
+  k = k+s; # if a student is repeating the course, cycle through the problems, don't assign same one
+  n = probs.length;
+  if x=='0,2,5:7' then print "x=#{x}, hash=#{hash}, hex4=#{hex4}, k=#{k}, s=#{s}, n=#{n}, k%n=#{k%n}\n" end # qwe
+  return k%n;
+end
+
+# returns a 32-digit hex string
+def md5_hash_hex(x)
+  h = Digest::MD5.new
+  h << x
+  return h.to_s # to_s method gives the result in hex
+end
+
 # writes a csv file like set,book,ch,num,parts,flags,chunk,student
 # if args['gb_file'] is null string, makes fake roster with only blow_joe
 # book=1 always; nowadays only one book in xml file; OpenGrade wants a book number, which corresponds to a <toc> in the xml file
@@ -416,6 +451,14 @@ def sets_csv(args)
   sets = hw_to_sets(hw,book)
   unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}") end
   roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
+  unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
+  term = args['term']
+  if term=~/\A([sfw])(\d\d)\Z/ then
+    semester,year = $1,$2.to_i
+    year = year+2000
+  else
+    fatal_error("term '#{term}' is not formatted like f14")
+  end
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   csv = ''
@@ -444,10 +487,14 @@ def sets_csv(args)
       fatal_error("class not set in gradebook file for #{student}")
     end
     if only_class.nil? || roster[student]["class"]==only_class then
+      student_id = roster[student]["id_string"]
       1.upto(sets.length-1) { |set_number|
         stuff[set_number].each { |fg|
           flags,individualization_group = fg
-          i = 0 # FIXME -- just assigns the first problem in the group to every student
+          probs = []
+          individualization_group.each { |p| probs.push(p[1])}
+          chapter = individualization_group[0][0]
+          i = select_using_hash(chapter,probs,year,semester,student_id)
           p = individualization_group[i]
           parts = ''
           if !(p[2].nil?) then parts = p[2].downcase end
@@ -835,7 +882,10 @@ def self_service_hw_list(args)
       }
       return html;
     }
-    // returns a number from 0 to n-1, where n is the length of the array probs
+    // Returns a number from 0 to n-1, where n is the length of the array probs.
+    // Result depends on order of problems; don't worry about sorting this so it's more canonical, since that
+    //         would be a mess to do correctly and would give no benefits.
+    // This is also implemented in ruby in a function of the same name in whiz.rb.
     function select_using_hash(chapter,probs,year,semester,student_id) {
       // year = 2014, etc.
       // semester = "s" or "f"
@@ -846,12 +896,18 @@ def self_service_hw_list(args)
       // figure out an integer for the semester, counting from spring 2014 = 0
       var s = (year-2014)*2;
       if (semester==="f") {s=s+1;}
-      var hash = md5(student_id+","+chapter+","+probs.join(":")); // 32 hex digits
-      hash = hash.substring(28,31);
-      k = parseInt(hash,16);
+      var x = student_id+","+chapter+","+probs.join(":");
+      var hash = md5(x); // 32 hex digits
+      hex4 = hash.substring(28,32); // extracts 28..31
+      k = parseInt(hex4,16);
       k = k+s; // if a student is repeating the course, cycle through the problems, don't assign same one
       n = probs.length;
+      // if (x==='0,2,5:7') { debug("x="+x+" hash="+hash+" hex4="+hex4+" k="+k+" s="+s+" n="+n)  }
       return k%n;
+    }
+    function debug(s) {
+      var p = document.getElementById("debug");
+      p.innerHTML = p.innerHTML+s;
     }
     function calculate() {
       var p = document.getElementById("output");
@@ -878,6 +934,7 @@ def self_service_hw_list(args)
           </p>
         </form>
         <p id="output"></p>
+        <p id="debug"></p>
         <script>#{js}</script>
            </body>
     </html>
