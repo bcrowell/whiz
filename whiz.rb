@@ -178,6 +178,10 @@ def describe_prob_and_parts(p)
   return (p[1].to_s+p[2]).downcase
 end
 
+def describe_prob_and_parts_with_flags(p,flags,format)
+  return (p[1].to_s+p[2]).downcase+describe_flags(flags,format)
+end
+
 def chapter_of_individualization_group(g)
   all_same_chapter = g.map {|p| p[0]==g[0][0]}.reduce {|a,b| a && b}
   if !all_same_chapter then return nil end
@@ -195,15 +199,25 @@ def describe_individualization_group_simple(g)
 end
 
 # format can be plain,tex,html
+def describe_flags(flags,format)
+  d = ''
+  flags.keys.each { |f|
+    if f=='c' then
+      if format=='tex' then f="$\\int$" end
+      if format=='plain' then f="(calculus)" end
+      if format=='html' then f="&int;" end
+    end
+    d=d+f unless f=='o'
+  }
+  return d
+end
+
+# format can be plain,tex,html
 def describe_individualization_group(flags,g,format)
   s = describe_individualization_group_simple(g)
   fl = flags.clone # don't modify flags for other members of the flag group
   if $has_solution[[g[0][0],g[0][1]]] then fl['s']=true end
-  fl.keys.each { |f|
-    mark = f
-    if f=='c' and format=='tex' then f="$\\int$" end
-    s=s+f unless f=='o'
-  }
+  s = s + describe_flags(flags,format)
   return s
 end
 
@@ -753,7 +767,8 @@ def self_service_hw_list(args)
           description = []
           individualization_group.each { |p|
             pp.push(p[1])
-            description.push(p[0].to_s+"-"+describe_prob_and_parts(p)) # FIXME -- won't display flags
+            dd = p[0].to_s+"-"+describe_prob_and_parts_with_flags(p,flags,'html')
+            description.push(dd)
           }
           year = '2014' # FIXME
           semester = 'f'; # FIXME
