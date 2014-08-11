@@ -17,12 +17,15 @@
 #     exclude_if ... list of flags that cause a problem not to be assigned
 # args are normally a JSON structure, surrounded by ''
 
+require 'date'
 require 'json'
 require 'psych'
 require 'yaml'
 
 $label_to_num = {}
+$num_to_label = {} # $num_to_label[[7,3]]="foo"
 $has_solution = {} # boolean, $has_solution[[7,3]] for ch. 7, #3
+$problem_assigned_on_set = {} # $problem_assigned_on_set[[7,3]]=12
 
 def fatal_error(message)
   $stderr.print "whiz.rb: fatal error: #{message}\n"
@@ -96,6 +99,10 @@ def read_problems_csv(book)
           fatal_error("label #{label} is multiply defined in file #{file} for book #{book}")
         end
         $label_to_num[label] = [ch,num]
+        if !($num_to_label[[ch,num]].nil?) then
+          fatal_error("problem #{ch}-#{num} has two labels defined, #{$num_to_label[[ch,num]]} and #{label}, both for book #{book}")
+        end
+        $num_to_label[[ch,num]] = label
         $has_solution[[ch,num]] = (soln==1)
       end
    end
@@ -220,7 +227,7 @@ def spaceship_individualization_group(g1,g2)
 end
 
 # converts json streams to problem sets
-# has side-effect of reading problems.csv file
+# has side-effect of reading problems.csv file and filling in $problem_assigned_on_set
 def hw_to_sets(hw,book) 
   sets = []
   stream_starts_at_set = 1
@@ -239,7 +246,64 @@ def hw_to_sets(hw,book)
 
   read_problems_csv(book)
 
+  1.upto(sets.length-1) { |set_number|
+    sets[set_number].each { |chunk|
+      chunk.each { |fg|
+        flags,probs = fg
+        probs.each { |g|
+          g.each { |p|
+            k = [p[0],p[1]]
+            label = $num_to_label[k]
+            if $problem_assigned_on_set[k].nil?
+              $problem_assigned_on_set[k] = set_number
+            else
+              if p[2].nil? || p[2]=='' then
+                fatal_error("problem #{p[0]}-#{p[1]}, #{label}, assigned on both hw #{$problem_assigned_on_set[k]} and hw #{set_number}, and no specific parts were given on the second hw")
+              end
+            end
+          }
+        }
+      }
+    }
+  }
+
   return sets
+end
+
+# sets = output of hw_to_sets
+# return value is array of entries like this:
+#   [nil,"note associated with a particular hw"]
+#   [[3,27],"also associated specifically with problem 3-27"]
+def assign_notes_to_sets(sets,hw,book)
+  notes = []
+  stream_starts_at_set = 1
+  hw.each { |stream|
+    stream_starts_at_set = stream_starts_at_set+stream["delay"].to_i
+    if !(stream["notes"].nil?) then
+      stream["notes"].each { |t,text|
+        t = t.to_s
+        p = nil
+        if t=~/\A(\d+)\Z/ then
+          t = $1.to_i
+          s = stream_starts_at_set+t
+        else
+          if !($label_to_num.has_key?(t)) then
+            fatal_error("note is given for problem #{t}, but no such label is defined; text of note is #{text}")
+          end
+          ch,num = $label_to_num[t]
+          p = [ch,num]
+          s = $problem_assigned_on_set[p]
+          text.gsub!(/\$\$/) {"#{ch}-#{num}"}
+        end
+        if notes[s].nil? then notes[s]=[] end
+        notes[s].push([p,text])
+      }
+    end                                                                              
+  }
+  1.upto(sets.length-1) { |set_number|
+    if notes[set_number].nil? then notes[set_number]=[] end
+  }
+  return notes
 end
 
 def hw_table(args)
@@ -643,6 +707,7 @@ def self_service_hw_list(args)
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
   sets = hw_to_sets(hw,book)
+  notes = assign_notes_to_sets(sets,hw,book)
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   title = "Homework Assignments"
@@ -651,6 +716,16 @@ def self_service_hw_list(args)
   1.upto(sets.length-1) { |set_number|
     set = sets[set_number]
     d.push(['string',"<h2>Homework #{set_number}</h2>\n"]);
+    if !(notes[set_number].nil?) then
+      notes[set_number].each { |n|
+        prob,note = n
+        if prob.nil?
+          d.push(['string',"  <p>"+note+"</p>\n"])
+        else
+          d.push(['conditional',"  <p>"+note+"</p>\n",prob])
+        end
+      }
+    end
     0.upto(1) { |online|
       if online==0 then d.push(['string',"<h3>Online</h3>"]) else d.push(['string',"<h3>Paper</h3>"]) end
       d.push(['string',"<p>"])
@@ -671,6 +746,7 @@ def self_service_hw_list(args)
         flags,individualization_group = v
         if individualization_group.length==1 then
           stuff.push(describe_individualization_group(flags,individualization_group,'html'))
+          d.push(['assigned',individualization_group[0][0],individualization_group[0][1]])
         else
           chapter = individualization_group[0][0]
           pp = []
@@ -705,15 +781,37 @@ def self_service_hw_list(args)
     function the_hw(student_id) {
       hw_data = #{JSON.generate(d)};
       var html = "";
+      // --------- figure out which problems were assigned
+      var assigned = {};
+      for (var i=0; i<hw_data.length; i++) {
+        t = hw_data[i][0];
+        x = hw_data[i][1];
+        if (t==='assigned') {
+          assigned[String(x)+"-"+String(hw_data[i][2])] = 1;
+        }
+        if (t==='indiv') {
+          chapter = x["chapter"]; year = x["year"]; semester = x["semester"]; probs = x["probs"];
+          var m = select_using_hash(chapter,probs,year,semester,student_id);
+          var p = probs[m];
+          assigned[String(chapter)+"-"+String(p)] = 1;
+        }
+      }
+      // --------- generate output
       for (var i=0; i<hw_data.length; i++) {
         t = hw_data[i][0];
         x = hw_data[i][1];
         if (t==='string') { html = html + x; }
+        if (t==='conditional') {
+          var p = hw_data[i][2];
+          var ch = p[0];
+          var num = p[1];
+          var k = String(ch)+"-"+String(num);
+          if (assigned[k]==1) {
+            html = html +x;
+          }
+        }
         if (t==='indiv') {
-          chapter = x["chapter"];
-          year = x["year"];
-          semester = x["semester"];
-          probs = x["probs"];
+          chapter = x["chapter"]; year = x["year"]; semester = x["semester"]; probs = x["probs"];
           description = x["description"];
           var m = select_using_hash(chapter,probs,year,semester,student_id);
           //html = html + "m="+String(m)+" ";
@@ -733,9 +831,7 @@ def self_service_hw_list(args)
       // figure out an integer for the semester, counting from spring 2014 = 0
       var s = (year-2014)*2;
       if (semester==="f") {s=s+1;}
-      pp = probs.slice(0); // clone it; http://stackoverflow.com/questions/597588/how-do-you-clone-an-array-of-objects-in-javascript
-      pp.sort(); // changes the array
-      var hash = md5(student_id+","+chapter+","+pp.join(":")); // 32 hex digits
+      var hash = md5(student_id+","+chapter+","+probs.join(":")); // 32 hex digits
       hash = hash.substring(28,31);
       k = parseInt(hash,16);
       k = k+s; // if a student is repeating the course, cycle through the problems, don't assign same one
@@ -746,8 +842,7 @@ def self_service_hw_list(args)
       var p = document.getElementById("output");
       var student_id = document.getElementById("student_id").value;
       var result = "";
-      result = result + "<h1>Your Homework</h2><p>This was generated for student ID "+student_id+". Please print it out.</p>"
-          +"<p>The MD5 of your student ID is "+md5(student_id)+".</p>";
+      result = result + "<h1>Your Homework</h2><p>This was generated for student ID "+student_id+". Please print it out. Assignments defined #{DateTime.now.strftime "%m-%d-%Y"}.</p>";
       result = result + the_hw(student_id);
       p.innerHTML = result;
     }
