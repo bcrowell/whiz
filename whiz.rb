@@ -7,7 +7,7 @@
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
 #   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb","term":"f14"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
-#   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm"}'
+#   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm","term":"f14"}'
 #   optional args for sets_csv:
 #     class ... select only that class; error if some students don't have class set
 #   optional args for points_possible and hw_table:
@@ -452,13 +452,7 @@ def sets_csv(args)
   unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}") end
   roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
   unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
-  term = args['term']
-  if term=~/\A([sfw])(\d\d)\Z/ then
-    semester,year = $1,$2.to_i
-    year = year+2000
-  else
-    fatal_error("term '#{term}' is not formatted like f14")
-  end
+  semester,year = parse_term(args['term'])
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   csv = ''
@@ -762,6 +756,16 @@ return (msw << 16) | (lsw & 0xFFFF);
 JS
 end
 
+def parse_term(term)
+  if term=~/\A([sf])(\d\d)\Z/ then
+    semester,year = $1,$2.to_i
+    year = year+2000
+  else
+    fatal_error("term '#{term}' is not formatted like f14")
+  end
+  return [semester,year]
+end
+
 def self_service_hw_list(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
   hw = get_json_data_from_file_or_die(args['in_file'])
@@ -769,6 +773,8 @@ def self_service_hw_list(args)
   book = args['book']
   sets = hw_to_sets(hw,book)
   notes = assign_notes_to_sets(sets,hw,book)
+  unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
+  semester,year = parse_term(args['term'])
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   title = "Homework Assignments"
@@ -817,8 +823,6 @@ def self_service_hw_list(args)
             dd = p[0].to_s+"-"+describe_prob_and_parts_with_flags(p,flags,'html')
             description.push(dd)
           }
-          year = '2014' # FIXME
-          semester = 'f'; # FIXME
           stuff.push({"chapter"=>chapter,"year"=>year,"semester"=>semester,"probs"=>pp,
                         "description"=>description})
         end
