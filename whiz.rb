@@ -7,13 +7,15 @@
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
 #   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb","term":"f14"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
-#   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm","term":"f14"}'
+#   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm","term":"f14","boilerplate":"foo.html","class_title":"Physics 210"}'
+#          boilerplate can be null string or name of html file to include at top
 #   optional args for sets_csv:
 #     class ... select only that class; error if some students don't have class set
 #   optional args for points_possible and hw_table:
 #     ec_if ... list of flags (like 'c') that cause a problem to be counted as extra credit
 #   optional args for points_possible and sets_csv:
 #     header ... 0 or 1; default=1=output header for csv file; used so I can concatenate 205 & 210 files
+#   optional args for points_possible, self_service_hw_list and sets_csv:
 #     exclude_if ... list of flags that cause a problem not to be assigned
 # args are normally a JSON structure, surrounded by ''
 
@@ -28,8 +30,10 @@ $num_to_label = {} # $num_to_label[[7,3]]="foo"
 $has_solution = {} # boolean, $has_solution[[7,3]] for ch. 7, #3
 $problem_assigned_on_set = {} # $problem_assigned_on_set[[7,3]]=12
 
+$verb = ''
+
 def fatal_error(message)
-  $stderr.print "whiz.rb: fatal error: #{message}\n"
+  $stderr.print "whiz.rb: #{$verb} fatal error: #{message}\n"
   exit(-1)
 end
 
@@ -775,11 +779,21 @@ def self_service_hw_list(args)
   notes = assign_notes_to_sets(sets,hw,book)
   unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
   semester,year = parse_term(args['term'])
+  unless args.has_key?('boilerplate') then fatal_error("args do not contain boilerplate key: #{JSON.generate(args)}") end
+  boilerplate = args['boilerplate']
+  if boilerplate!="" then
+    b=slurp_file(boilerplate)
+    if b.nil? then fatal_error("error reading boilerplate file #{boilerplate}") end
+    boilerplate = b
+  end
+  unless args.has_key?('class_title') then fatal_error("args do not contain class_title key: #{JSON.generate(args)}") end
+  class_title = args['class_title']
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
-  title = "Homework Assignments"
+  title = "Homework Assignments for #{class_title}"
 
   d = [];
+  d.push(['string',boilerplate]);
   1.upto(sets.length-1) { |set_number|
     set = sets[set_number]
     d.push(['string',"<h2>Homework #{set_number}</h2>\n"]);
@@ -794,17 +808,20 @@ def self_service_hw_list(args)
       }
     end
     0.upto(1) { |online|
-      if online==0 then d.push(['string',"<h3>Online</h3>"]) else d.push(['string',"<h3>Paper</h3>"]) end
-      d.push(['string',"<p>"])
+      if online==0 then u="online" else u="paper" end
+      d.push(['string',"<p><i>#{u}</i>: "])
       victims = []
       set.each { |stream_group|
         stream_group.each { |flag_group|
           flags,probs = flag_group
           is_online = (flags.has_key?("o"))
           if (is_online && online==1) || (!is_online && online==0) then
-            probs.each { |individualization_group|
-              victims.push([flags,individualization_group])
-            }
+            excluded = flags_contain_letter_in_string(flags,args['exclude_if'])
+            if !excluded then
+              probs.each { |individualization_group|
+                victims.push([flags,individualization_group])
+              }
+            end
           end
         }
       } # end loop over stream groups
@@ -917,8 +934,13 @@ def self_service_hw_list(args)
       var p = document.getElementById("output");
       var student_id = document.getElementById("student_id").value;
       var result = "";
-      result = result + "<h1>Your Homework</h2><p>This was generated for student ID "+student_id+". Please print it out. Assignments defined #{DateTime.now.strftime "%m-%d-%Y"}.</p>";
+      result = result + "<h1>Your Homework for #{class_title}</h2><p>This was generated for student ID "+student_id+". Please print it out.</p>";
+      var re = new RegExp("^[0-9]{8,8}$");
+      if (!(re.test(student_id))) {
+        result = result + "<p>******!!!!!!!! WARNING -- The student ID you've entered is not a possible Fullerton College student ID. A student ID should consist of exactly 8 digits. Don't omit leading zeroes. !!!!!!!********</p>"
+      }
       result = result + the_hw(student_id);
+      result = result + "<p>Assignments defined #{DateTime.now.strftime "%m-%d-%Y"} for term #{semester}#{year}.</p>";
       p.innerHTML = result;
     }
     function clear_output() {
