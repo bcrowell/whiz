@@ -1027,7 +1027,8 @@ def syllabus(args)
   f.write("<% $semester=\"#{term}\";  $whichclass=\"#{cl}\" ; $section=\"#{section}\"; $boilerplate=\"#{boilerplate_dir}\" %>")
   f.write(slurp_file(tex_file))
   g = out_file_stem+".tex";
-  shell_without_capturing_output("#{fruby} #{f.path} >#{g}",true,false)
+  shell_without_capturing_output("#{fruby} #{f.path} >#{g}",false,false)
+  shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",false,false)
 end
 
 ################################################################################################
