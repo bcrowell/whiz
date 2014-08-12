@@ -13,6 +13,7 @@
 #          boilerplate can be null string or name of html file to include at top
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
+#   whiz.rb report '{"out_file":"report","due":"due205f14.csv","sets":"sets.csv","reading":"reading.csv"}'
 #   optional args for self_service_hw_list:
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
@@ -31,7 +32,7 @@ require 'date'
 require 'json'
 require 'psych'
 require 'yaml'
-require 'open3'
+# require 'open3'
 
 $label_to_num = {}
 $num_to_label = {} # $num_to_label[[7,3]]="foo"
@@ -1049,6 +1050,82 @@ def syllabus(args)
   shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",false,false)
 end
 
+def report(args)
+  out_file = require_arg(args,'out_file')
+  due = require_arg(args,'due')
+  sets = require_arg(args,'sets')
+  reading = require_arg(args,'reading')
+  date_to_meeting = {}
+  meeting_to_date = []
+  meeting_to_reading = []
+  meeting_to_hw = []
+  hw_to_meeting = []
+  ch_to_meeting = [] # earliest meeting at which hw from this ch was assigned
+  meeting_to_ch = [] # inverse of ch_to_meeting
+  m = 1
+  n_meetings = 0
+  File.readlines(reading).each { |line|
+    unless line=~/(.*),"(.*)"/ then fatal_error("illegal line in #{reading}: #{line}") end
+    date,ch = [$1,$2]
+    meeting_to_date[m] = date
+    date_to_meeting[date] = m
+    meeting_to_reading[m] = ch
+    meeting_to_ch[m] = nil
+    n_meetings = m
+    m=m+1
+  }
+  File.readlines(due).each { |line|
+    unless line=~/(.*),(.*)/ then fatal_error("illegal line in #{due}: #{line}") end
+    hw,date = [$1.to_i,$2]
+    if date_to_meeting[date].nil? then fatal_error("date #{date} in #{due} is not in #{reading}") end
+    m = date_to_meeting[date]
+    meeting_to_hw[m] = hw
+    hw_to_meeting[hw] = m
+  }
+  header = true
+  File.readlines(sets).each { |line|
+    if header then
+      header = false
+    else
+      # set,book,ch,num,parts,flags,chunk,student
+      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
+      hw,ch = [$1.to_i,$3.to_i]
+      m = hw_to_meeting[hw]
+      if !m.nil? && (ch_to_meeting[ch].nil? || m<ch_to_meeting[ch]) then
+        ch_to_meeting[ch] = m
+      end
+    end
+  }
+  0.upto(ch_to_meeting.length-1) { |ch|
+    unless ch_to_meeting[ch].nil? then meeting_to_ch[ch_to_meeting[ch]] = ch end
+  }
+  r = "              hw\n"+
+      "date       hw ch reading\n"
+  1.upto(n_meetings) { |m|
+    r = r + pad_string(meeting_to_date[m],10,'r')+' '+
+        pad_string(meeting_to_hw[m],2,'l')+' '+
+        pad_string(meeting_to_ch[m],2,'l')+' '+
+        pad_string(meeting_to_reading[m],8,'r')+
+        "\n"
+  }
+  File.open(args['out_file'],'w') { |f|
+    f.print r
+  }
+end
+
+def pad_string(x,l,side)
+  if x.nil? then
+    y = ''
+  else
+    y = x.to_s
+  end
+  y = y.clone
+  while y.length<l do
+    if side=='r' then y = y+' ' else y = ' '+y end
+  end
+  return y
+end
+
 ################################################################################################
 
 
@@ -1076,4 +1153,5 @@ if $verb=="sets_csv" then sets_csv($args); clean_up_and_exit end
 if $verb=="roster_csv" then roster_csv($args); clean_up_and_exit end
 if $verb=="self_service_hw_list" then self_service_hw_list($args); clean_up_and_exit end
 if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
+if $verb=="report" then report($args); clean_up_and_exit end
 fatal_error("unrecognized verb: #{$verb}")
