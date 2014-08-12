@@ -1,0 +1,5 @@
+minor
+  - make hw pages more nicely printable using CSS, media="print"
+  - solutions not alphabetized according to last, first; see FIXME
+wish list
+  - copy sets.csv to somewhere that spotter can find it; make spotter aware of it

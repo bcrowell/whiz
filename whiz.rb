@@ -7,6 +7,8 @@
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
 #   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb","term":"f14"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
+#   whiz.rb roster_csv '{"out_file":"roster.csv","gb_file":"foo.gb"}'
+#          gb_file can be null string, for fake run with only Joe Blow on roster
 #   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm","term":"f14","boilerplate":"foo.html","class_title":"Physics 210"}'
 #          boilerplate can be null string or name of html file to include at top
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
@@ -451,6 +453,20 @@ def md5_hash_hex(x)
   return h.to_s # to_s method gives the result in hex
 end
 
+def roster_csv(args)
+  unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}") end
+  roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
+  unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
+  csv = ''
+  roster.keys.sort.each { |student| # FIXME -- sort won't always be right, because based on key, not last/first
+    d = roster[student]
+    csv = csv + "#{student},\"#{d['last']}\",\"#{d['first']}\",#{d['class']}\n"
+  }  
+  File.open(args['out_file'],'w') { |f|
+    f.print csv
+  }
+end
+
 # writes a csv file like set,book,ch,num,parts,flags,chunk,student
 # if args['gb_file'] is null string, makes fake roster with only blow_joe
 # book=1 always; nowadays only one book in xml file; OpenGrade wants a book number, which corresponds to a <toc> in the xml file
@@ -581,6 +597,8 @@ end
 # d2ddea18f00665ce8623e36bd4e3c7c5
 def myers_md5_implementation
   return <<'JS'
+// Joseph Myers' implementation of MD5 in JS
+// http://www.myersdaily.org/joseph/javascript/md5-text.html
 function md5cycle(x, k) {
 var a = x[0], b = x[1], c = x[2], d = x[3];
 
@@ -1055,6 +1073,7 @@ if $verb=="parse_hw" then parse_hw($args); clean_up_and_exit end
 if $verb=="hw_table" then hw_table($args); clean_up_and_exit end
 if $verb=="points_possible" then points_possible_to_csv($args); clean_up_and_exit end
 if $verb=="sets_csv" then sets_csv($args); clean_up_and_exit end
+if $verb=="roster_csv" then roster_csv($args); clean_up_and_exit end
 if $verb=="self_service_hw_list" then self_service_hw_list($args); clean_up_and_exit end
 if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
-fatal_error("unrecognized verb: $verb")
+fatal_error("unrecognized verb: #{$verb}")

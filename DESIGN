@@ -44,9 +44,24 @@ points_possible.csv
   1,p,1,0
   1,o,1,0
   ...
-sets205.csv
+sets205m.csv
   created by whiz; copied to grades/38_fall14/205m.sets/
   set,book,ch,num,parts,flags,chunk,student
   1,1,2,1,,o,,alejandrino_nicole
   ...
-  
+boilerplate_for_hw.html
+boilerplate_instr.html
+  are included in self-service hw generator
+~/Lightandmatter/hw/205.html
+~/Lightandmatter/hw/210.html
+  self-service hw generators
+  created by whiz
+  hash function depends on student ID, semester, course, chapter, and list of problems (does depend
+         on order of problems)
+  each html file contains semester and course hard-coded; instructions warn students to check that
+         these are correct; student ID is checked against a regex, and a warning is given if it doesn't match
+  can input 0 for student ID to generate Joe Blow's
+roster*.csv
+  key,last,first,class
+  needed by howdy for producing solutions
+  last and first must be surrounded by double quotes
