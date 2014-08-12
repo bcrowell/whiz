@@ -9,6 +9,10 @@
 #          gb_file can be null string, for fake run with only Joe Blow on roster
 #   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm","term":"f14","boilerplate":"foo.html","class_title":"Physics 210"}'
 #          boilerplate can be null string or name of html file to include at top
+#   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
+#                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
+#   optional args for self_service_hw_list:
+#     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
 #     class ... select only that class; error if some students don't have class set
 #   optional args for points_possible and hw_table:
@@ -19,16 +23,19 @@
 #     exclude_if ... list of flags that cause a problem not to be assigned
 # args are normally a JSON structure, surrounded by ''
 
+require 'tempfile'
 require 'digest/md5'
 require 'date'
 require 'json'
 require 'psych'
 require 'yaml'
+require 'open3'
 
 $label_to_num = {}
 $num_to_label = {} # $num_to_label[[7,3]]="foo"
 $has_solution = {} # boolean, $has_solution[[7,3]] for ch. 7, #3
 $problem_assigned_on_set = {} # $problem_assigned_on_set[[7,3]]=12
+$files_to_delete = []
 
 $verb = ''
 
@@ -786,11 +793,18 @@ def self_service_hw_list(args)
     if b.nil? then fatal_error("error reading boilerplate file #{boilerplate}") end
     boilerplate = b
   end
+  boilerplate_instructions = ''
+  if args.has_key?('boilerplate_instructions') then
+    boilerplate_instructions = args['boilerplate_instructions']
+    b=slurp_file(boilerplate_instructions)
+    if b.nil? then fatal_error("error reading boilerplate file #{boilerplate_instructions}") end
+    boilerplate_instructions = b
+  end
   unless args.has_key?('class_title') then fatal_error("args do not contain class_title key: #{JSON.generate(args)}") end
   class_title = args['class_title']
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
-  title = "Homework Assignments for #{class_title}"
+  title = "Homework Assignments for #{class_title}, #{semester}#{year}"
 
   d = [];
   d.push(['string',boilerplate]);
@@ -934,7 +948,7 @@ def self_service_hw_list(args)
       var p = document.getElementById("output");
       var student_id = document.getElementById("student_id").value;
       var result = "";
-      result = result + "<h1>Your Homework for #{class_title}</h2><p>This was generated for student ID "+student_id+". Please print it out.</p>";
+      result = result + "<h1>Your Homework for #{class_title}, #{semester}#{year}</h2><p>This was generated for student ID "+student_id+". Please print it out.</p>";
       var re = new RegExp("^[0-9]{8,8}$");
       if (!(re.test(student_id))) {
         result = result + "<p>******!!!!!!!! WARNING -- The student ID you've entered is not a possible Fullerton College student ID. A student ID should consist of exactly 8 digits. Don't omit leading zeroes. !!!!!!!********</p>"
@@ -954,12 +968,12 @@ def self_service_hw_list(args)
       <body>
         <form name="myform">
           <p>
-            Enter your student ID:
+            Read the information below, then enter your student ID:
                    <input type="text" name="student_id" id="student_id">
             <input type="button" value="Enter" onclick="calculate()">
           </p>
         </form>
-        <p id="output"></p>
+        <div id="output"><h1>#{title}</h1>#{boilerplate_instructions}</div>
         <p id="debug"></p>
         <script>#{js}</script>
            </body>
@@ -968,6 +982,52 @@ def self_service_hw_list(args)
   File.open(args['out_file'],'w') { |f|
     f.print html
   }
+end
+
+def require_arg(args,name)
+  unless args.has_key?(name) then fatal_error("args do not contain #{name} key: #{JSON.generate(args)}") end
+  return args[name]
+end
+
+# execute a shell command
+# normal use: shell_without_output(c,false,false)
+# normal return is [true]
+# on error, return value is [false,error message]
+def shell_without_capturing_output(c,display,dry_run)
+  if display then $stderr.print c+"\n" end
+  r = system(c) unless dry_run
+  if r.nil? then
+    return [false,$?]
+  else
+    return [true]
+  end
+  # for capturing output: http://stackoverflow.com/a/5970819/1142217
+  # stdin, stdout, stderr, wait_thr = Open3.popen3('usermod', '-p', @options['shadow'], @options['username'])
+  # stdout.gets(nil)
+  # stderr.gets(nil)
+  # exit_code = wait_thr.value
+end
+
+# returns a file, so you can do f.write, etc.
+def temp_file
+  f = Tempfile.new('')
+  $files_to_delete.push(f.path)
+  return f
+end
+
+def syllabus(args)
+  tex_file = require_arg(args,'tex_file') # syll.tex
+  out_file_stem = require_arg(args,'out_file_stem')
+  term = require_arg(args,'term')
+  boilerplate_dir = require_arg(args,'boilerplate_dir')
+  cl = require_arg(args,'class') # 205, 210, ...
+  fruby = require_arg(args,'fruby')
+  section = require_arg(args,'section')
+  f = temp_file
+  f.write("<% $semester=\"#{term}\";  $whichclass=\"#{cl}\" ; $section=\"#{section}\"; $boilerplate=\"#{boilerplate_dir}\" %>")
+  f.write(slurp_file(tex_file))
+  g = out_file_stem+".tex";
+  shell_without_capturing_output("#{fruby} #{f.path} >#{g}",true,false)
 end
 
 ################################################################################################
@@ -983,9 +1043,17 @@ if !($args["header"].nil?) && $args["header"].class.to_s!="Fixnum" then
   fatal_error("argument \"header\" must be integer, not #{$args["header"].class}")
 end
 
-if $verb=="parse_hw" then parse_hw($args); exit(0) end
-if $verb=="hw_table" then hw_table($args); exit(0) end
-if $verb=="points_possible" then points_possible_to_csv($args); exit(0) end
-if $verb=="sets_csv" then sets_csv($args); exit(0) end
-if $verb=="self_service_hw_list" then self_service_hw_list($args); exit(0) end
+def clean_up_and_exit
+  $files_to_delete.each { |file|
+    FileUtils.rm(file)
+  }
+  exit(0)
+end
+
+if $verb=="parse_hw" then parse_hw($args); clean_up_and_exit end
+if $verb=="hw_table" then hw_table($args); clean_up_and_exit end
+if $verb=="points_possible" then points_possible_to_csv($args); clean_up_and_exit end
+if $verb=="sets_csv" then sets_csv($args); clean_up_and_exit end
+if $verb=="self_service_hw_list" then self_service_hw_list($args); clean_up_and_exit end
+if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
 fatal_error("unrecognized verb: $verb")
