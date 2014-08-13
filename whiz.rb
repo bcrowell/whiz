@@ -345,10 +345,15 @@ def assign_starts_of_streams_to_sets(sets,hw)
   stream_starts_at_set = 1
   hw.each { |stream|
     stream_starts_at_set = stream_starts_at_set+stream["delay"].to_i
-    stream_labels[stream_starts_at_set] = stream["stream"]
+    if stream_labels[stream_starts_at_set].nil? then
+      stream_labels[stream_starts_at_set]=stream["stream"]
+    else
+      stream_labels[stream_starts_at_set] = stream_labels[stream_starts_at_set]+';'+stream["stream"]
+    end
   }
   1.upto(sets.length-1) { |set_number|
     if stream_labels[set_number].nil? then stream_labels[set_number]='' end
+    #print "=== #{set_number}->#{stream_labels[set_number]}\n"
   }
   return stream_labels
 end
@@ -1123,15 +1128,17 @@ def report(args)
   0.upto(ch_to_meeting.length-1) { |ch|
     unless ch_to_meeting[ch].nil? then meeting_to_ch[ch_to_meeting[ch]] = ch end
   }
-  r = "              hw          stream's label\n"+
-      "date       hw ch reading  in hw.yaml\n"+
-      "---------- -- -- -------- --------------\n"
+  r = "                          hw     stream's label\n"+
+      "hw date       reading     ch     in hw.yaml\n"+
+      "-- ---------- ----------- --     --------------\n"
   1.upto(n_meetings) { |m|
     if meeting_to_hw[m].nil? then l='' else l=stream_labels[meeting_to_hw[m]] end
-    r = r + pad_string(meeting_to_date[m],10,'r')+' '+
+    if l.nil? then l='' end
+    r = r +
         pad_string(meeting_to_hw[m],2,'l')+' '+
-        pad_string(meeting_to_ch[m],2,'l')+' '+
-        pad_string(meeting_to_reading[m],9,'r')+
+        pad_string(meeting_to_date[m],10,'r')+' '+
+        pad_string(meeting_to_reading[m],11,'l')+' '+
+        pad_string(meeting_to_ch[m],2,'l')+'     '+
         l+
         "\n"
   }
