@@ -13,7 +13,8 @@
 #          boilerplate can be null string or name of html file to include at top
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
-#   whiz.rb report '{"out_file":"report","due":"due205f14.csv","sets":"sets.csv","reading":"reading.csv"}'
+#   whiz.rb report '{"in_file":"hw.json","out_file":"report","due":"due205f14.csv","sets":"sets.csv",
+#                            "reading":"reading.csv","book":"lm"}'
 #   optional args for self_service_hw_list:
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
@@ -302,7 +303,7 @@ def hw_to_sets(hw,book)
 end
 
 # sets = output of hw_to_sets
-# return value is array of entries like this:
+# return value is array of lists of entries like this:
 #   [nil,"note associated with a particular hw"]
 #   [[3,27],"also associated specifically with problem 3-27"]
 def assign_notes_to_sets(sets,hw,book)
@@ -335,6 +336,21 @@ def assign_notes_to_sets(sets,hw,book)
     if notes[set_number].nil? then notes[set_number]=[] end
   }
   return notes
+end
+
+# sets = output of hw_to_sets
+# returns array of strings consisting of the labels of the streams from the yaml file
+def assign_starts_of_streams_to_sets(sets,hw)
+  stream_labels = []
+  stream_starts_at_set = 1
+  hw.each { |stream|
+    stream_starts_at_set = stream_starts_at_set+stream["delay"].to_i
+    stream_labels[stream_starts_at_set] = stream["stream"]
+  }
+  1.upto(sets.length-1) { |set_number|
+    if stream_labels[set_number].nil? then stream_labels[set_number]='' end
+  }
+  return stream_labels
 end
 
 def hw_table(args)
@@ -1051,6 +1067,10 @@ def syllabus(args)
 end
 
 def report(args)
+  book = require_arg(args,'book')
+  hw = get_json_data_from_file_or_die(require_arg(args,'in_file'))
+  sets = hw_to_sets(hw,book)
+  stream_labels = assign_starts_of_streams_to_sets(sets,hw) # qwe
   out_file = require_arg(args,'out_file')
   due = require_arg(args,'due')
   sets = require_arg(args,'sets')
@@ -1062,6 +1082,8 @@ def report(args)
   hw_to_meeting = []
   ch_to_meeting = [] # earliest meeting at which hw from this ch was assigned
   meeting_to_ch = [] # inverse of ch_to_meeting
+  n_hw_in_syll = 0
+  n_hw_defined = 0
   m = 1
   n_meetings = 0
   File.readlines(reading).each { |line|
@@ -1077,6 +1099,7 @@ def report(args)
   File.readlines(due).each { |line|
     unless line=~/(.*),(.*)/ then fatal_error("illegal line in #{due}: #{line}") end
     hw,date = [$1.to_i,$2]
+    if hw>n_hw_in_syll then n_hw_in_syll=hw end
     if date_to_meeting[date].nil? then fatal_error("date #{date} in #{due} is not in #{reading}") end
     m = date_to_meeting[date]
     meeting_to_hw[m] = hw
@@ -1090,6 +1113,7 @@ def report(args)
       # set,book,ch,num,parts,flags,chunk,student
       unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
       hw,ch = [$1.to_i,$3.to_i]
+      if hw>n_hw_defined then n_hw_defined=hw end
       m = hw_to_meeting[hw]
       if !m.nil? && (ch_to_meeting[ch].nil? || m<ch_to_meeting[ch]) then
         ch_to_meeting[ch] = m
@@ -1099,15 +1123,23 @@ def report(args)
   0.upto(ch_to_meeting.length-1) { |ch|
     unless ch_to_meeting[ch].nil? then meeting_to_ch[ch_to_meeting[ch]] = ch end
   }
-  r = "              hw\n"+
-      "date       hw ch reading\n"
+  r = "              hw          stream's label\n"+
+      "date       hw ch reading  in hw.yaml\n"+
+      "---------- -- -- -------- --------------\n"
   1.upto(n_meetings) { |m|
+    if meeting_to_hw[m].nil? then l='' else l=stream_labels[meeting_to_hw[m]] end
     r = r + pad_string(meeting_to_date[m],10,'r')+' '+
         pad_string(meeting_to_hw[m],2,'l')+' '+
         pad_string(meeting_to_ch[m],2,'l')+' '+
-        pad_string(meeting_to_reading[m],8,'r')+
+        pad_string(meeting_to_reading[m],9,'r')+
+        l+
         "\n"
   }
+  if n_hw_defined!=n_hw_in_syll then
+    s = "The schedule page of the syllabus has #{n_hw_in_syll} hw assignments, but #{n_hw_defined} are defined.\n"
+    $stderr.print s
+    r = r+s
+  end
   File.open(args['out_file'],'w') { |f|
     f.print r
   }
