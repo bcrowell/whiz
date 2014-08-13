@@ -9,7 +9,8 @@
 #          gb_file can be null string, for fake run with only Joe Blow on roster
 #   whiz.rb roster_csv '{"out_file":"roster.csv","gb_file":"foo.gb"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
-#   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm","term":"f14","boilerplate":"foo.html","class_title":"Physics 210"}'
+#   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm",
+#                "term":"f14","boilerplate":"foo.html","class_title":"Physics 210","section":"m"}'
 #          boilerplate can be null string or name of html file to include at top
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
@@ -545,6 +546,7 @@ def sets_csv(args)
           f = flags_to_string(flags)
           # see comments above function for why book is always 1
           csv = csv + "#{set_number},1,#{p[0]},#{p[1]},#{parts},#{f},,#{student}\n" unless excluded
+          if p[0]<0 || p[1]<0 then fatal_error("problem set #{set_number} has illegal ch,num=#{p[0]},#{p[1]}#") end
         }
       }
     end
@@ -826,6 +828,7 @@ def self_service_hw_list(args)
   notes = assign_notes_to_sets(sets,hw,book)
   unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
   semester,year = parse_term(args['term'])
+  section = require_arg(args,'section')
   unless args.has_key?('boilerplate') then fatal_error("args do not contain boilerplate key: #{JSON.generate(args)}") end
   boilerplate = args['boilerplate']
   if boilerplate!="" then
@@ -842,6 +845,8 @@ def self_service_hw_list(args)
   end
   unless args.has_key?('class_title') then fatal_error("args do not contain class_title key: #{JSON.generate(args)}") end
   class_title = args['class_title']
+  if section=='m' then class_title=class_title+", Mon-Wed section" end
+  if section=='t' then class_title=class_title+", Tue-Thu section" end
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   title = "Homework Assignments for #{class_title}, #{semester}#{year}"
@@ -1068,7 +1073,9 @@ def syllabus(args)
   f.write(slurp_file(tex_file))
   g = out_file_stem+".tex";
   shell_without_capturing_output("#{fruby} #{f.path} >#{g}",false,false)
-  shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",false,false)
+  1.upto(2) { |i|
+    shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",false,false)
+  }
 end
 
 def report(args)
@@ -1132,21 +1139,33 @@ def report(args)
       "hw date       reading     ch     in hw.yaml\n"+
       "-- ---------- ----------- --     --------------\n"
   1.upto(n_meetings) { |m|
-    if meeting_to_hw[m].nil? then l='' else l=stream_labels[meeting_to_hw[m]] end
-    if l.nil? then l='' end
+    hw = meeting_to_hw[m]
+    if hw.nil? || stream_labels[hw].nil? then
+      describe_stream_labels=''
+    else
+      describe_stream_labels=stream_labels[meeting_to_hw[m]]
+    end
+    if hw.nil? then 
+      hw = '--'
+      hw_ch='--'
+    else
+      hw_ch = meeting_to_ch[m]
+    end
     r = r +
-        pad_string(meeting_to_hw[m],2,'l')+' '+
+        pad_string(hw,2,'l')+' '+
         pad_string(meeting_to_date[m],10,'r')+' '+
         pad_string(meeting_to_reading[m],11,'l')+' '+
-        pad_string(meeting_to_ch[m],2,'l')+'     '+
-        l+
+        pad_string(hw_ch,2,'l')+'     '+
+        describe_stream_labels+
         "\n"
   }
   if n_hw_defined!=n_hw_in_syll then
-    s = "The schedule page of the syllabus has #{n_hw_in_syll} hw assignments, but #{n_hw_defined} are defined.\n"
-    $stderr.print s
-    r = r+s
+    n_hw_check = "The schedule page of the syllabus has #{n_hw_in_syll} hw assignments, but #{n_hw_defined} are defined.\n"
+    $stderr.print n_hw_check
+  else
+    n_hw_check = "The number of hw assignments on the schedule page of the syllabus matches the number defined; both are #{n_hw_in_syll}\n"
   end
+  r = r+n_hw_check
   File.open(args['out_file'],'w') { |f|
     f.print r
   }
