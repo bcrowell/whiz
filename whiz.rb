@@ -1093,7 +1093,9 @@ def report(args)
   meeting_to_hw = []
   hw_to_meeting = []
   ch_to_meeting = [] # earliest meeting at which hw from this ch was assigned
+  end_ch_to_meeting = [] # last meeting at which hw from this ch was assigned
   meeting_to_ch = [] # inverse of ch_to_meeting
+  meeting_to_end_ch = [] # inverse of end_ch_to_meeting, multiple-valued
   n_hw_in_syll = 0
   n_hw_defined = 0
   m = 1
@@ -1118,6 +1120,7 @@ def report(args)
     hw_to_meeting[hw] = m
   }
   header = true
+  when_ch_assigned = [] # [meeting] -> list of chapters
   File.readlines(sets).each { |line|
     if header then
       header = false
@@ -1127,23 +1130,43 @@ def report(args)
       hw,ch = [$1.to_i,$3.to_i]
       if hw>n_hw_defined then n_hw_defined=hw end
       m = hw_to_meeting[hw]
-      if !m.nil? && (ch_to_meeting[ch].nil? || m<ch_to_meeting[ch]) then
-        ch_to_meeting[ch] = m
+      if !m.nil? then
+        if (ch_to_meeting[ch].nil? || m<ch_to_meeting[ch]) then ch_to_meeting[ch] = m end
+        #if (end_ch_to_meeting[ch].nil? || m>end_ch_to_meeting[ch]) then end_ch_to_meeting[ch] = m end
+        if when_ch_assigned[m].nil? then when_ch_assigned[m]=[] end
+        when_ch_assigned[m].push(ch)
       end
     end
   }
+  # look for end of main stream for each ch
+  0.upto(when_ch_assigned.length-1) { |m|
+    a = when_ch_assigned[m]
+    if when_ch_assigned[m+1].nil? then b=[] else b=when_ch_assigned[m+1] end
+    if !(a.nil?) then
+      a.each { |ch|
+        if !(b.include?(ch)) && end_ch_to_meeting[ch].nil? then end_ch_to_meeting[ch]=m end
+      }
+    end
+  }
   0.upto(ch_to_meeting.length-1) { |ch|
-    unless ch_to_meeting[ch].nil? then meeting_to_ch[ch_to_meeting[ch]] = ch end
+    unless ch_to_meeting[ch].nil? then meeting_to_ch[ch_to_meeting[ch]] = ch end # assumes only start one ch/meeting
+    unless end_ch_to_meeting[ch].nil? then # may end more than one ch/meeting
+      m = end_ch_to_meeting[ch]
+      if meeting_to_end_ch[m].nil? then meeting_to_end_ch[m]=[] end
+      meeting_to_end_ch[m].push(ch)
+    end
   }
   r = "                          hw     stream's label\n"+
       "hw date       reading     ch     in hw.yaml\n"+
       "-- ---------- ----------- --     --------------\n"
   1.upto(n_meetings) { |m|
     hw = meeting_to_hw[m]
-    if hw.nil? || stream_labels[hw].nil? then
-      describe_stream_labels=''
-    else
-      describe_stream_labels=stream_labels[meeting_to_hw[m]]
+    descr = []
+    if !(hw.nil?) && !(stream_labels[hw].nil?) then
+      descr.push(stream_labels[meeting_to_hw[m]])
+    end
+    if !(meeting_to_end_ch[m].nil?) then
+      descr.push("(end hw for ch."+meeting_to_end_ch[m].map{|x| x.to_s}.join(",")+")")
     end
     if hw.nil? then 
       hw = '--'
@@ -1156,7 +1179,7 @@ def report(args)
         pad_string(meeting_to_date[m],10,'r')+' '+
         pad_string(meeting_to_reading[m],11,'l')+' '+
         pad_string(hw_ch,2,'l')+'     '+
-        describe_stream_labels+
+        descr.join(' ')+
         "\n"
   }
   if n_hw_defined!=n_hw_in_syll then
