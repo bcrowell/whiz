@@ -2,8 +2,8 @@
 - stream: ch 2
   delay: 0
   chunks:
-  - "o:traffic/AB,foo|bar  ;  baz" # ... for first problem set on this topic
-  - "glub"                      # ... 2nd problem set
+  - "o:traffic/AB,foo|bar  ;  *o:baz" # ... for first problem set on this topic
+  - "glub..."                      # ... 2nd problem set; ... is wildcard
   notes:
     0: "The full statement of the question is in the book, not in Spotter" 
          # 0= placed after chunk 0 (1st chunk)

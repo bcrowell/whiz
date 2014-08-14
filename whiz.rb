@@ -106,7 +106,14 @@ end
 
 ################################################################################################
 
+# used to guard against reading zero times or more than once
+def problems_csv_has_been_read
+  return $label_to_num.keys.length>0
+end
+
+# called as side-effect by parse_hw, hw_to_sets
 def read_problems_csv(book)
+  if problems_csv_has_been_read then fatal_error("read_problems_csv appears to have been called more than once") end
   file = find_problems_csv(book)
   File.readlines(file).each { |line|
     if line=~/(.*),(.*),(.*),(.*),(.*)/ then
@@ -134,6 +141,7 @@ end
 
 ################################################################################################
 
+# typical input: "o:traffic/AB,foo|bar  ;  *o:baz ; glub..."
 def parse_hw_chunk(chunk)
   result = []
   chunk.gsub(/\s+/,'').split(/;/).each { |g|
@@ -149,20 +157,59 @@ def parse_hw_chunk(chunk)
         if b=~/(.*)\/(.*)/ then
           b,parts = [$1,$2]
         end
-        label = b
-        if $label_to_num.has_key?(b) then 
-          b=$label_to_num[label]
-        else
-          b=[-1,-1]
-          $stderr.print "warning: name #{label} not found in problems.csv\n"
-        end
-        b.push(parts)
-        b
+        label_to_list(b,parts).pop # FIXME -- don't just take first one
       }
     }
     result.push([flags,g])
   }
   return result
+end
+
+# has side effect of printing warnings to stderr if label doesn't match anything
+# returns list of [ch,num,parts]
+def label_to_list(label,parts)
+  if !problems_csv_has_been_read then fatal_error("in label_with_wildcard_to_list, problems csv has not been read") end
+  unless label=~/\A[a-zA-Z0-9\-_]*\Z/ then fatal_error("label #{label} contains illegal characters; legal ones are a-z, A-Z, 0-9, -, _") end
+       # ... don't allow characters that could be confused with regexp; but do allow -, which is regexp meta char
+       #     don't want confusion with regexps, because that's how we handle ... wildcard
+  # --- for efficiency and clearer error messages, handle the no-wildcard case separately
+  if label=~Regexp::new(Regexp::quote("...")) then
+    return label_with_wildcard_to_list(label,parts)
+  else
+    if false then
+      x = JSON.generate(label_without_wildcard_to_list(label,parts))
+      y = JSON.generate(label_with_wildcard_to_list(label,parts))
+      if x!=y then fatal_error("label=#{label}, #{x}, #{y}") end
+    end
+    return label_without_wildcard_to_list(label,parts)
+  end
+end
+
+# no need to call this directly; use label_to_list
+def label_without_wildcard_to_list(label,parts)
+  if !problems_csv_has_been_read then fatal_error("in label_with_wildcard_to_list, problems csv has not been read") end
+  if $label_to_num.has_key?(label) then 
+    return [$label_to_num[label] + [parts]]
+  else
+    $stderr.print "warning: name #{label} not found in problems.csv\n"
+    return []
+  end
+end
+
+# no need to call this directly; use label_to_list for efficiency
+def label_with_wildcard_to_list(label,parts)
+  if !problems_csv_has_been_read then fatal_error("in label_with_wildcard_to_list, problems csv has not been read") end
+  list = []
+  l = label.clone
+  l.gsub!(/\.\.\./,"__WILD__")
+  l = Regexp::quote(l) # escape - characters
+  l.gsub!(/__WILD__/,".*")
+  re = Regexp::new("\\A#{l}\\Z")
+  $label_to_num.each { |ll,value|
+    if ll=~re then list.push(value + [parts]) end
+  }
+  if list.length==0 then fatal_error("pattern #{label}, containing wildcard ..., doesn't match any labels") end
+  return list
 end
 
 def parse_hw_stream(stream)
