@@ -117,7 +117,8 @@ def read_problems_csv(book)
   file = find_problems_csv(book)
   File.readlines(file).each { |line|
     if line=~/(.*),(.*),(.*),(.*),(.*)/ then
-      b,ch,num,label,soln = [$1,$2.to_i,$3.to_i,$4,$5.to_i]
+      b,ch,num,label,soln = [$1,$2.to_i,$3,$4,$5.to_i] # note num is string, since "number" can be like "g7"
+      split_problem_number_into_letter_and_number(num) # dies with fatal error if syntax is wrong
       if b==book && label!="deleted" then
         if !($label_to_num[label].nil?) then 
           fatal_error("label #{label} is multiply defined in file #{file} for book #{book}")
@@ -170,7 +171,7 @@ def resolve_labels(g)
         end
         aa = aa + label_to_list(b,parts) # label_to_list can return a list with >1 element if there's a wildcard, 0 elts if no match
       }
-      if aa.length==0 then aa = [[-1,-1,'']] end # later code assumes not empty list
+      if aa.length==0 then aa = [[-1,'','']] end # later code assumes not empty list
       aa
     }
     return g
@@ -294,10 +295,31 @@ def describe_individualization_group(flags,g,format)
   return s
 end
 
+# used for sorting output; has to deal with "numbers" like g7, not just integers
+# compare "3" < "7", "g7" < "h3", etc.
+def spaceship_problem_number(x,y)
+  u = split_problem_number_into_letter_and_number(x)
+  v = split_problem_number_into_letter_and_number(y)
+  if u[0]!=v[0] then return u[0]<=>v[0] else return u[1]<=>v[1] end
+end
+
+# has to deal with "numbers" like g7, not just integers
+# returns ['',fixnum] or [string,fixnum]
+def split_problem_number_into_letter_and_number(x)
+  if x.to_i>0 then return ['',x.to_i] end # for efficiency
+  if x=~/([a-z]*)([0-9]+)/ then
+    return [$1,$2.to_i]
+  else
+    fatal_error("illegal problem number, #{x}")
+  end
+end
+
+# used for sorting output
 def lowest_number_in_individualization_group(g)
-  l = 9999
+  if g.length==0 then fatal_error("zero members in individualization group") end
+  l=g[0][1]
   g.each { |p|
-    if p[1]<l then l=p[1] end
+    if spaceship_problem_number(p[1],l)== -1 then l=p[1] end
   }
   return l
 end
@@ -310,7 +332,8 @@ def spaceship_individualization_group(g1,g2)
     # shouldn't happen, but if it does, do something half-way reasonable using string comparison
   end
   if c1!=c2 then return c1 <=> c2 end
-  return lowest_number_in_individualization_group(g1) <=> lowest_number_in_individualization_group(g2)
+  return spaceship_problem_number(lowest_number_in_individualization_group(g1),
+                                  lowest_number_in_individualization_group(g2))
 end
 
 # converts json streams to problem sets
@@ -600,7 +623,7 @@ def sets_csv(args)
           f = flags_to_string(flags)
           # see comments above function for why book is always 1
           csv = csv + "#{set_number},1,#{p[0]},#{p[1]},#{parts},#{f},,#{student}\n" unless excluded
-          if p[0]<0 || p[1]<0 then fatal_error("problem set #{set_number} has illegal ch,num=#{p[0]},#{p[1]}#") end
+          if p[0]<0 || p[1]=='' then fatal_error("problem set #{set_number} has illegal ch,num=#{p[0]},#{p[1]}#") end
         }
       }
     end
