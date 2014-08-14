@@ -867,7 +867,7 @@ def self_service_hw_list(args)
       }
     end
     0.upto(1) { |online|
-      if online==0 then u="online" else u="paper" end
+      if online==1 then u="online" else u="paper" end
       d.push(['string',"<p><i>#{u}</i>: "])
       victims = []
       set.each { |stream_group|
