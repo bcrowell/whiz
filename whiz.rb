@@ -181,7 +181,7 @@ end
 # returns list of [ch,num,parts]
 def label_to_list(label,parts)
   if !problems_csv_has_been_read then fatal_error("in label_with_wildcard_to_list, problems csv has not been read") end
-  unless label=~/\A[a-zA-Z0-9\-_]*\Z/ then fatal_error("label #{label} contains illegal characters; legal ones are a-z, A-Z, 0-9, -, _") end
+  unless label=~/\A[a-zA-Z0-9\-\._]*\Z/ then fatal_error("label #{label} contains illegal characters; legal ones are a-z, A-Z, 0-9, -, _") end
        # ... don't allow characters that could be confused with regexp; but do allow -, which is regexp meta char
        #     don't want confusion with regexps, because that's how we handle ... wildcard
   # --- for efficiency and clearer error messages, handle the no-wildcard case separately
@@ -214,7 +214,6 @@ def label_with_wildcard_to_list(label,parts)
   re = Regexp::new("\\A#{l}\\Z")
   $label_to_num.each { |ll,value|
     if ll=~re then list.push(value + [parts]) end
-    if ll=~re then $stderr.print "pushed #{value}\n" end # FIXME
   }
   if list.length==0 then fatal_error("pattern #{label}, containing wildcard ..., doesn't match any labels") end
   return list
