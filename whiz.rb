@@ -158,23 +158,9 @@ def parse_hw_chunk(chunk)
   return result
 end
 
-def resolve_labels(g)
-  u = resolve_labels_new(g)
-  v = resolve_labels_old(g)
-  x = JSON.generate(u)
-  y = JSON.generate(v)
-  if x!=y then fatal_error("resolve_labels, x=#{x}, y=#{y}") end
-  return u
-end
-
-def deep_clone_through_json(x)
-  return JSON.parse(JSON.generate(x))
-end
-
 # g looks like [["traffic/AB"],["foo","bar"]], where foo and bar are alternatives for individualization, foo|bar
-def resolve_labels_new(g)
-    gg = deep_clone_through_json(g)
-    gg.map! { |a|
+def resolve_labels(g)
+    g.map! { |a|
       # if input was foo|bar...|baz, where ... is wildcard, a looks like ["foo/B","bar.../AB","baz"]
       aa = [] # new version of a with labels and wildcards resolved
       a.each { |b|
@@ -185,25 +171,9 @@ def resolve_labels_new(g)
         aa = aa + label_to_list(b,parts) # label_to_list can return a list with >1 element if there's a wildcard, 0 elts if no match
       }
       if aa.length==0 then aa = [[-1,-1,'']] end # later code assumes not empty list
-      $stderr.print "aa=#{JSON.generate(aa)}\n" # FIXME
       aa
     }
-    return gg
-end
-
-def resolve_labels_old(g)
-    gg = deep_clone_through_json(g)
-    gg.each { |a|
-      # if input was foo|bar...|baz, where ... is wildcard, a looks like ["foo/B","bar.../AB","baz"]
-      a.map! { |b|
-        parts = ''
-        if b=~/(.*)\/(.*)/ then
-          b,parts = [$1,$2]
-        end
-        label_to_list(b,parts).pop # FIXME -- don't just take first one
-      }
-    }
-    return gg
+    return g
 end
 
 # has side effect of printing warnings to stderr if label doesn't match anything
@@ -217,11 +187,6 @@ def label_to_list(label,parts)
   if label=~Regexp::new(Regexp::quote("...")) then
     return label_with_wildcard_to_list(label,parts)
   else
-    if true then # FIXME -- remove this debugging feature once I'm sure the wildcard feature is solid
-      x = JSON.generate(label_without_wildcard_to_list(label,parts))
-      y = JSON.generate(label_with_wildcard_to_list(label,parts))
-      if x!=y then fatal_error("label=#{label}, #{x}, #{y}") end
-    end
     return label_without_wildcard_to_list(label,parts)
   end
 end
