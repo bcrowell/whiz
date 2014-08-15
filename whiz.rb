@@ -16,6 +16,8 @@
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
 #   whiz.rb report '{"in_file":"hw.json","out_file":"report","due":"due205f14.csv","sets":"sets.csv",
 #                            "reading":"reading.csv","book":"lm"}'
+#   whiz.rb labels '{"book":"lm","ch":"7","num":"1 3"}'
+#           prints out the labels for problems 7-1 and 7-3
 #   optional args for self_service_hw_list:
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
@@ -37,8 +39,8 @@ require 'yaml'
 # require 'open3'
 
 $label_to_num = {}
-$num_to_label = {} # $num_to_label[[7,3]]="foo"
-$has_solution = {} # boolean, $has_solution[[7,3]] for ch. 7, #3
+$num_to_label = {} # $num_to_label[[7,"3"]]="foo"
+$has_solution = {} # boolean, $has_solution[[7,"3"]] for ch. 7, #3
 $problem_assigned_on_set = {} # $problem_assigned_on_set[[7,3]]=12
 $files_to_delete = []
 
@@ -290,7 +292,7 @@ def describe_individualization_group(flags,g,format)
   s = describe_individualization_group_simple(g)
   fl = flags.clone # don't modify flags for other members of the flag group
   if $has_solution[[g[0][0],g[0][1]]] then fl['s']=true end
-  s = s + describe_flags(flags,format)
+  s = s + describe_flags(fl,format)
   return s
 end
 
@@ -1144,11 +1146,13 @@ def syllabus(args)
   cl = require_arg(args,'class') # 205, 210, ...
   fruby = require_arg(args,'fruby')
   section = require_arg(args,'section')
-  f = temp_file
+  rbtex = "syll.rbtex";
+  f = File.open(rbtex,'w');
   f.write("<% $semester=\"#{term}\";  $whichclass=\"#{cl}\" ; $section=\"#{section}\"; $boilerplate=\"#{boilerplate_dir}\" %>")
   f.write(slurp_file(tex_file))
+  f.close;
   g = out_file_stem+".tex";
-  shell_without_capturing_output("#{fruby} #{f.path} >#{g}",false,false)
+  shell_without_capturing_output("#{fruby} #{rbtex} >#{g}",false,false)
   1.upto(2) { |i|
     shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",false,false)
   }
@@ -1283,6 +1287,24 @@ def pad_string(x,l,side)
   return y
 end
 
+def numbers_to_labels(args)
+  book = require_arg(args,'book')
+  ch = require_arg(args,'ch').to_i
+  num = require_arg(args,'num')
+  read_problems_csv(book)
+  err = ''
+  list = []
+  num.split(/\s+/).each { |n|
+    label = $num_to_label[[ch,n]]
+    if label.nil? then
+      err = err + "no label found for book=#{book}, ch=#{ch}, n=#{n}\n"
+    else
+      list.push(label)
+    end
+  }
+  print err+list.join(',')+"\n"
+end
+
 ################################################################################################
 
 
@@ -1311,4 +1333,5 @@ if $verb=="roster_csv" then roster_csv($args); clean_up_and_exit end
 if $verb=="self_service_hw_list" then self_service_hw_list($args); clean_up_and_exit end
 if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
 if $verb=="report" then report($args); clean_up_and_exit end
+if $verb=="labels" then numbers_to_labels($args); clean_up_and_exit end
 fatal_error("unrecognized verb: #{$verb}")
