@@ -282,6 +282,7 @@ def describe_flags(flags,format)
       if format=='plain' then f="(calculus)" end
       if format=='html' then f="&int;" end
     end
+    if f=='s' && format=='tex' then f="${}^\\textup{s}$" end
     d=d+f unless f=='o'
   }
   return d
@@ -473,7 +474,13 @@ def hw_table(args)
       } # end loop over stream groups
       victims.sort {|u,v| spaceship_individualization_group(u[1],v[1])}.each { |v|
         flags,individualization_group = v
-        stuff[online].push(describe_individualization_group(flags,individualization_group,'tex'))
+        d = describe_individualization_group(flags,individualization_group,'tex')
+        if !(flags.has_key?('o') || flags.has_key?('*') || 
+             $has_solution[[individualization_group[0][0],individualization_group[0][1]]]) then
+          # has to be graded by hand
+          d = "\\underline{#{d}}"
+        end
+        stuff[online].push(d)
       }
     } # end loop over paper and online
     tex = tex + <<-"TEX"
