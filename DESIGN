@@ -32,6 +32,8 @@ flags
 hw.json
   a parsed version of hw.yaml
   see sample_file for what it looks like
+problems.csv
+  book,ch,num,label,soln
 due205f14.csv
 due210f14.csv
   written by syll_schedule.rb; gets copied into grades/38_fall14/205m.sets/

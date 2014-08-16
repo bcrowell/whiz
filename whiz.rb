@@ -15,9 +15,11 @@
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
 #   whiz.rb report '{"in_file":"hw.json","out_file":"report","due":"due205f14.csv","sets":"sets.csv",
-#                            "reading":"reading.csv","book":"lm"}'
+#                            "reading":"reading.csv","book":"lm","out_file2":"problems_assigned"}'
 #   whiz.rb labels '{"book":"lm","ch":"7","num":"1 3"}'
 #           prints out the labels for problems 7-1 and 7-3
+#   whiz.rb solutions '{"in_file":"hw.json","out_file":"solns.tex","class_title":"Physics 210","book":"lm",
+#           "sets":"sets.csv","gb_file":"foo.gb","sources_parent_dir":"/home/bcrowell/Documents/writing/books/fund/solns"}'
 #   optional args for self_service_hw_list:
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
@@ -282,7 +284,7 @@ def describe_flags(flags,format)
       if format=='plain' then f="(calculus)" end
       if format=='html' then f="&int;" end
     end
-    if f=='s' && format=='tex' then f="${}^\\textup{s}$" end
+    if f=='s' && format=='tex' then f="${}_\\textup{s}$" end
     d=d+f unless f=='o'
   }
   return d
@@ -316,6 +318,11 @@ def split_problem_number_into_letter_and_number(x)
   end
 end
 
+# p[0]=chapter (fixnum), p[1]=num (string)
+def describe_problem(p)
+  return p[0].to_s+"-"+p[1]
+end
+
 # used for sorting output
 def lowest_number_in_individualization_group(g)
   if g.length==0 then fatal_error("zero members in individualization group") end
@@ -324,6 +331,13 @@ def lowest_number_in_individualization_group(g)
     if spaceship_problem_number(p[1],l)== -1 then l=p[1] end
   }
   return l
+end
+
+def spaceship_ch_and_num(p1,p2)
+  c1 = p1[0]
+  c2 = p2[0]
+  if c1!=c2 then return c1 <=> c2 end
+  return spaceship_problem_number(p1[1],p2[1])
 end
 
 def spaceship_individualization_group(g1,g2)
@@ -1171,6 +1185,7 @@ def report(args)
   sets = hw_to_sets(hw,book)
   stream_labels = assign_starts_of_streams_to_sets(sets,hw) # qwe
   out_file = require_arg(args,'out_file')
+  out_file2 = require_arg(args,'out_file2')
   due = require_arg(args,'due')
   sets = require_arg(args,'sets')
   reading = require_arg(args,'reading')
@@ -1183,6 +1198,10 @@ def report(args)
   end_ch_to_meeting = [] # last meeting at which hw from this ch was assigned
   meeting_to_ch = [] # inverse of ch_to_meeting
   meeting_to_end_ch = [] # inverse of end_ch_to_meeting, multiple-valued
+  problem_assigned = {} # hash of [ch,"num"]=boolean
+  $num_to_label.keys.each { |p|
+    problem_assigned[p] = false
+  }
   n_hw_in_syll = 0
   n_hw_defined = 0
   m = 1
@@ -1214,7 +1233,8 @@ def report(args)
     else
       # set,book,ch,num,parts,flags,chunk,student
       unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
-      hw,ch = [$1.to_i,$3.to_i]
+      hw,ch,num = [$1.to_i,$3.to_i,$4] # no to_i on num, could be "g7"
+      problem_assigned[[ch,num]] = true # FIXME -- problems show up as unassigned if randomly not assigned to anyone
       if hw>n_hw_defined then n_hw_defined=hw end
       m = hw_to_meeting[hw]
       if !m.nil? then
@@ -1243,6 +1263,7 @@ def report(args)
       meeting_to_end_ch[m].push(ch)
     end
   }
+  #----
   r = "                          hw     stream's label\n"+
       "hw date       reading     ch     in hw.yaml\n"+
       "-- ---------- ----------- --     --------------\n"
@@ -1276,8 +1297,31 @@ def report(args)
     n_hw_check = "The number of hw assignments on the schedule page of the syllabus matches the number defined; both are #{n_hw_in_syll}\n"
   end
   r = r+n_hw_check
-  File.open(args['out_file'],'w') { |f|
+  File.open(out_file,'w') { |f|
     f.print r
+  }
+  #----
+  r2 = ''
+  0.upto(ch_to_meeting.length-1) { |ch|
+    l = {}
+    cc = ''
+    cc = cc + "------ chapter #{ch} ------\n"
+    [true,false].each { |assigned|
+      l[assigned] = []
+      $num_to_label.keys.each { |p| # p=[ch,"num"]
+        is_assigned = problem_assigned[p]
+        if p[0]==ch && is_assigned==assigned then l[assigned].push(p) end
+      }
+      l[assigned].sort! { |p1,p2| spaceship_ch_and_num(p1,p2)}
+      cc = cc + {true=>'assigned',false=>'not assigned'}[assigned] + ": "+
+             l[assigned].map { |p| p[1]}.join(' ')+"\n"
+    }
+    if l[true].length>0 then
+      r2 = r2 + cc
+    end
+  }
+  File.open(out_file2,'w') { |f|
+    f.print r2
   }
 end
 
@@ -1312,6 +1356,130 @@ def numbers_to_labels(args)
   print err+list.join(',')+"\n"
 end
 
+# for use with simplesolns.cls
+# lacks a bunch of fancy features that howdy supplies for physics classes:
+#   - no wide tables
+#   - can't break a problem into parts on different problem sets ("chunks")
+#   - only generates per-student solutions, not a solutions manual
+#   - no support for different classes in the same room at the same time
+#   - m4 to allow references to other problems
+def solutions(args)
+  book = require_arg(args,'book')
+  hw = get_json_data_from_file_or_die(require_arg(args,'in_file'))
+  sets = hw_to_sets(hw,book)
+  stream_labels = assign_starts_of_streams_to_sets(sets,hw) # qwe
+  out_file = require_arg(args,'out_file')
+  class_title = require_arg(args,'class_title')
+  sets = require_arg(args,'sets')
+  gb_file = require_arg(args,'gb_file')
+  roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  solution_in_book = {} # [label]=boolean
+  sources_parent_dir = require_arg(args,'sources_parent_dir')
+  subdir_list = []
+  Dir.chdir(sources_parent_dir) do # do block so we chdir back afterward
+    subdir_list=Dir["*"].reject{|o| not File.directory?(o)}.sort
+  end
+  probs = {}
+  n_hw_defined=0
+  header = true
+  students_encountered = {}
+  problem_labels_encountered = []
+  File.readlines(sets).each { |line|
+    if header then
+      header = false
+    else
+      # set,book,ch,num,parts,flags,chunk,student
+      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
+      hw,ch,num,student = [$1.to_i,$3.to_i,$4,$8] # no to_i on num, could be "g7"
+      if hw>n_hw_defined then n_hw_defined=hw end
+      students_encountered[student] = true
+      if probs[student].nil? then probs[student] = {} end
+      if probs[student][hw].nil? then probs[student][hw] = [] end
+      l = $num_to_label[[ch,num]]
+      if l.nil? then fatal_error("no label found for ch. #{ch}, problem #{num}") end
+      problem_labels_encountered.push(l)
+      probs[student][hw].push(l)
+    end
+  }
+  students_encountered.keys.each { |k|
+    unless roster.has_key?(k) then fatal_error("student #{k} occurs in #{sets}, but not in #{gb_file}") end
+  }
+  roster.keys.each { |k|
+    unless students_encountered.has_key?(k) then fatal_error("student #{k} occurs in #{gb_file}, but not in #{sets}") end
+  }
+  label_to_source_file = {}
+  problem_labels_encountered.each { |l|
+    p = $label_to_num[l]
+    solution_in_book[l] = $has_solution[p]
+    subdir_list.each { |d|
+      t = sources_parent_dir+"/"+d+"/"+l+".tex"
+      if File.exists?(t) then label_to_source_file[l] = t; next end
+    }
+    if !solution_in_book[l] && label_to_source_file[l].nil? then $stderr.print "warning: no solution found for #{l} in any subdirectory of #{sources_parent_dir}\n" end
+  }
+  head = <<-"HEAD"
+    \\documentclass{simplesolns}
+    \\begin{document}
+    {\\Huge\\textbf{Solutions for #{class_title}}}\\\\\n
+    HEAD
+  tail = <<-'TAIL'
+    \end{document}
+    TAIL
+  toc = <<-"TOC_HEAD"
+    {\\Huge\\textbf{Solutions for #{class_title}}}\\\\\n
+    TOC_HEAD
+  tex = ''
+  1.upto(n_hw_defined) { |hw|
+    toc = toc + "\\noindent Homework #{hw} ... \\pageref{set#{hw}}\\\\\n"
+    first_student = true
+    roster.keys.sort.each { |student|
+      label_for_toc = ''
+      if first_student then label_for_toc = "\\label{set#{hw}}" end
+      tex = tex + <<-"TEX"
+        \\section*{Solutions to Homework #{hw}, #{class_title}, 
+                   #{roster[student]["first"]} #{roster[student]["last"]}}#{label_for_toc}
+      TEX
+      first_student = false
+      probs[student][hw].each { |label|
+        p = $label_to_num[label]
+        if solution_in_book[label] then
+          tex = tex+solution_helper(p,'solution in the back of the book')
+        else
+          source_file = label_to_source_file[label]
+          missing = false
+          if source_file.nil?
+            missing = true
+          else
+            s,err = slurp_file_with_detailed_error_reporting(source_file)
+            if s.nil? then 
+              missing=true 
+              $stderr.print "warning: error reading file #{source_file}, #{err}"
+            else
+              tex = tex+solution_helper(p,s)
+            end
+          end
+          if missing then
+            tex = tex+solution_helper(p,'!!!!!!!!!!! missing solution !!!!!!!!!!!!!!')
+          end
+        end
+      }
+    }
+  }
+  File.open(out_file,'w') { |f|
+    f.print head+toc + "\\pagebreak" + tex+tail
+  }
+end
+
+def solution_helper(p,s)
+  ch,num = p
+  tex = <<-"TEX"
+      \\noindent\\textbf{#{ch}-#{num}}\\quad %
+      #{s}
+      \\par
+    TEX
+  return tex
+end
+
 ################################################################################################
 
 
@@ -1341,4 +1509,5 @@ if $verb=="self_service_hw_list" then self_service_hw_list($args); clean_up_and_
 if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
 if $verb=="report" then report($args); clean_up_and_exit end
 if $verb=="labels" then numbers_to_labels($args); clean_up_and_exit end
+if $verb=="solutions" then solutions($args); clean_up_and_exit end
 fatal_error("unrecognized verb: #{$verb}")
