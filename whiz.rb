@@ -20,6 +20,8 @@
 #           prints out the labels for problems 7-1 and 7-3
 #   whiz.rb solutions '{"in_file":"hw.json","out_file":"solns.tex","class_title":"Physics 210","book":"lm",
 #           "sets":"sets.csv","gb_file":"foo.gb","sources_parent_dir":"/home/bcrowell/Documents/writing/books/fund/solns"}'
+#        a simple solutions generator that only provides enough features for 150A; see comments above
+#                  solutions() for a list of features it doesn't supply
 #   optional args for self_service_hw_list:
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
@@ -154,6 +156,11 @@ def parse_hw_chunk(chunk)
     if g=~/(.*):(.*)/ then
       f,g = [$1,$2]
       f.split('').each {|c| flags[c]=true }
+      if flags.keys.length>6 then $stderr.print "warning: in this input '#{chunk}', flags '#{f}', you have more than 6 flags; this would likely occur because you were missing a semicolon\n" end
+      [',','|','/']. each { |illegal_char|
+        if flags.has_key?(illegal_char) then fatal_error("in this input '#{chunk}', flags '#{f}' contain the character '#{illegal_char}', which is illegal; this would likely occur because you were missing a semicolon") end
+      }
+      if flags.keys.length<f.length then fatal_error("in this input '#{chunk}', flags '#{f}', some flags occur more than once; this would likely occur because you were missing a semicolon") end
     end
     g = g.split(/,/).map {|x| x.split(/\|/)}
     # g now looks like [["traffic/AB"],["foo","bar"]]
@@ -1425,9 +1432,7 @@ def solutions(args)
   tail = <<-'TAIL'
     \end{document}
     TAIL
-  toc = <<-"TOC_HEAD"
-    {\\Huge\\textbf{Solutions for #{class_title}}}\\\\\n
-    TOC_HEAD
+  toc = ''
   tex = ''
   1.upto(n_hw_defined) { |hw|
     toc = toc + "\\noindent Homework #{hw} ... \\pageref{set#{hw}}\\\\\n"
@@ -1436,8 +1441,12 @@ def solutions(args)
       label_for_toc = ''
       if first_student then label_for_toc = "\\label{set#{hw}}" end
       tex = tex + <<-"TEX"
-        \\section*{Solutions to Homework #{hw}, #{class_title}, 
-                   #{roster[student]["first"]} #{roster[student]["last"]}}#{label_for_toc}
+
+        \\pagebreak
+
+        \\noindent%
+        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title},
+                   #{roster[student]["first"]} #{roster[student]["last"]} }}#{label_for_toc}\\\\\n
       TEX
       first_student = false
       probs[student][hw].each { |label|
