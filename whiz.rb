@@ -45,7 +45,11 @@ require 'yaml'
 $label_to_num = {}
 $num_to_label = {} # $num_to_label[[7,"3"]]="foo"
 $has_solution = {} # boolean, $has_solution[[7,"3"]] for ch. 7, #3
-$problem_assigned_on_set = {} # $problem_assigned_on_set[[7,3]]=12
+$problem_assigned_on_set = {} 
+  # $problem_assigned_on_set[[7,"3"]]=12 , says problem 7-3 is assigned on set 12
+  # If there's individualized homework, then it's possible that despite this, 7-3 wasn't actually assigned to any
+  # student on set 12.
+  # Filled in by hw_to_sets(), which is normally called after calling get_json_data_from_file_or_die().
 $files_to_delete = []
 
 $verb = ''
@@ -1186,6 +1190,7 @@ def syllabus(args)
   }
 end
 
+# generates two output files, which I've been calling report and problems_assigned.
 def report(args)
   book = require_arg(args,'book')
   hw = get_json_data_from_file_or_die(require_arg(args,'in_file'))
@@ -1194,7 +1199,7 @@ def report(args)
   out_file = require_arg(args,'out_file')
   out_file2 = require_arg(args,'out_file2')
   due = require_arg(args,'due')
-  sets = require_arg(args,'sets')
+  sets_file = require_arg(args,'sets')
   reading = require_arg(args,'reading')
   date_to_meeting = {}
   meeting_to_date = []
@@ -1208,6 +1213,7 @@ def report(args)
   problem_assigned = {} # hash of [ch,"num"]=boolean
   $num_to_label.keys.each { |p|
     problem_assigned[p] = false
+    if $problem_assigned_on_set.has_key?(p) then problem_assigned[p]=true end
   }
   n_hw_in_syll = 0
   n_hw_defined = 0
@@ -1234,14 +1240,13 @@ def report(args)
   }
   header = true
   when_ch_assigned = [] # [meeting] -> list of chapters
-  File.readlines(sets).each { |line|
+  File.readlines(sets_file).each { |line|
     if header then
       header = false
     else
       # set,book,ch,num,parts,flags,chunk,student
-      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
+      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets_file}: #{line}") end
       hw,ch,num = [$1.to_i,$3.to_i,$4] # no to_i on num, could be "g7"
-      problem_assigned[[ch,num]] = true # FIXME -- problems show up as unassigned if randomly not assigned to anyone
       if hw>n_hw_defined then n_hw_defined=hw end
       m = hw_to_meeting[hw]
       if !m.nil? then
@@ -1327,6 +1332,17 @@ def report(args)
       r2 = r2 + cc
     end
   }
+  tot = {}
+  [true,false].each { |online| [true,false].each { |required| tot[[online,required]] = 0}}
+  1.upto(sets.length-1) { |set_number|
+    set = sets[set_number]
+    c = points_possible_on_set(set,args)
+    print JSON.generate(c)+"\n"
+    [true,false].each { |online| [true,false].each { |required| tot[[online,required]] += c[[online,required]]}}
+  }
+  r2 = r2+"totals:\n"
+  r2 = r2+"  graded paper:  #{tot[[false,false]]} + #{tot[[false,true]]} extra credit\n"
+  r2 = r2+"  graded online: #{tot[[true,false]]} + #{tot[[true,true]]} extra credit\n"
   File.open(out_file2,'w') { |f|
     f.print r2
   }
