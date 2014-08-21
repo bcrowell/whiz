@@ -592,7 +592,9 @@ def roster_csv(args)
   csv = ''
   roster.keys.sort.each { |student| # FIXME -- sort won't always be right, because based on key, not last/first
     d = roster[student]
-    csv = csv + "#{student},\"#{d['last']}\",\"#{d['first']}\",#{d['class']}\n"
+    if d['dropped'].nil? || d['dropped']!='true' then
+      csv = csv + "#{student},\"#{d['last']}\",\"#{d['first']}\",#{d['class']}\n"
+    end
   }  
   File.open(args['out_file'],'w') { |f|
     f.print csv
