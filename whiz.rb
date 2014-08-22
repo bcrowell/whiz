@@ -954,11 +954,10 @@ def groups(args)
     function shuffle() {
       var names = document.getElementById("names").value;
       var output = document.getElementById("output");
-
-      //output.innerHTML = names;
-      //return;
-
-
+      var m = Number(document.getElementById("group_size").value); // desired group size; some will be m-1
+      if (!(m>=1 && m<=99)) {m=4}
+      var cols = Number(document.getElementById("columns").value); // how many rows of desks
+      if (!(cols>=1 && cols<=99)) {cols=5}
       var raw_list = names.split("\\n");
       var list = [];
       for (var i=0; i<raw_list.length; i++) {
@@ -983,7 +982,6 @@ def groups(args)
         s.push(nm);
         used[k] = true;
       }
-      var m = 4; // desired group size; some will be m-1
       var n_small = 0; // number of groups of size m-1
       while ((n-n_small*(m-1))%m!=0) {n_small = n_small+1;}
       var n_big = (n-n_small*(m-1))/m;
@@ -1003,7 +1001,6 @@ def groups(args)
         t.push(gg);
         g = g+1;
       }
-      var cols = 3;
       r = r+"<table>\\n<tr>\\n";
       var col = 0;
       for (var g=0; g<t.length; g++) {
@@ -1031,6 +1028,8 @@ def groups(args)
           <p>
             <input type="button" value="Shuffle" onclick="shuffle()">
             <input type="button" value="Reset" onclick="reset()">
+            Group size: <input type="text" value="4" size="2" id="group_size">
+            Rows: <input type="text" value="5" size="2" id="columns">
           </p>
           <p>
             <textarea id="names" rows="30" cols="80">#{names.join("\n")}</textarea>
