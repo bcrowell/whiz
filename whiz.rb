@@ -12,6 +12,7 @@
 #   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm",
 #                "term":"f14","boilerplate":"foo.html","class_title":"Physics 210","section":"m"}'
 #          boilerplate can be null string or name of html file to include at top
+#   whiz.rb groups '{"out_file":"groups.html","class_title":"Physics 210","section":"m","gb_file":"foo.gb"}'
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
 #   whiz.rb report '{"in_file":"hw.json","out_file":"report","due":"due205f14.csv","sets":"sets.csv",
@@ -930,6 +931,120 @@ def parse_term(term)
   return [semester,year]
 end
 
+def class_title_with_section(t,section)
+  class_title = t.clone
+  if section=='m' then class_title=class_title+", Mon-Wed section" end
+  if section=='t' then class_title=class_title+", Tue-Thu section" end
+  return class_title
+end
+
+#   whiz.rb groups '{"out_file":"groups.html","class_title":"Physics 210","section":"m","gb_file":"foo.gb"}'
+def groups(args)
+  out_file = require_arg(args,'out_file')
+  class_title = class_title_with_section(require_arg(args,'class_title'),require_arg(args,'section'))
+  roster = get_roster_from_opengrade(require_arg(args,'gb_file')) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  names = []
+  roster.each { |key,value|
+    names.push("#{value['first']} #{value['last']}")
+  }
+  js = <<-"JS"
+    function random_int(n) { // random integer from 0 to n-1
+      return Math.floor(n*Math.random());
+    }
+    function shuffle() {
+      var names = document.getElementById("names").value;
+      var output = document.getElementById("output");
+
+      //output.innerHTML = names;
+      //return;
+
+
+      var raw_list = names.split("\\n");
+      var list = [];
+      for (var i=0; i<raw_list.length; i++) {
+        var patt = /\\w/;
+        if (/\\w/.test(raw_list[i])) {list.push(raw_list[i])}
+        //list.push(raw_list[i]);
+      }
+      //list = raw_list;
+      var s = [];
+      var used = [];
+      var n = list.length;
+      for (var i=0; i<=n-1; i++) {
+        used[i-1] = false;
+      }
+      for (var i=1; i<=n; i++) {
+        var k;
+        do {
+          k = random_int(n);
+        } while (used[k]);
+        var nm = list[k];
+        if (nm.length>16) {nm = nm.replace(new RegExp("([A-Z])[a-z]*$"),"$1.");}
+        s.push(nm);
+        used[k] = true;
+      }
+      var m = 4; // desired group size; some will be m-1
+      var n_small = 0; // number of groups of size m-1
+      while ((n-n_small*(m-1))%m!=0) {n_small = n_small+1;}
+      var n_big = (n-n_small*(m-1))/m;
+      var r = "";
+      var g=1;
+      var i=0;
+      var t=[];
+      while (i<n) {
+        var gg = "<h2>group "+g+"</h2>\\n";
+        var size = m;
+        if (g>n_big) {size=m-1}
+        //gg = gg + "size="+size;
+        for (var j=1; j<=size; j++) {
+          gg = gg + s[i]+"<br>\\n";
+          i = i+1;          
+        }
+        t.push(gg);
+        g = g+1;
+      }
+      var cols = 3;
+      r = r+"<table>\\n<tr>\\n";
+      var col = 0;
+      for (var g=0; g<t.length; g++) {
+        if (col>=cols) {r=r+"</tr>\\n<tr>"; col=0}
+        col++;
+        r = r + "<td>\\n"+t[g]+"\\n</td>\\n"; // 
+      }
+      r = r+"</tr>\\n</table>\\n";
+      r = r+"<p>total: "+n+" students</p>";
+      // r = r+"<p>n_small= "+n_small+"</p>";
+      output.innerHTML = r;
+    }
+    function reset() {
+      document.getElementById("names").value = "#{names.join("\\n")}";
+    }
+    JS
+  html = <<-"HTML"
+    <!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><title>Random groups for #{class_title}</title></head>
+      <body>
+        <h1>Random groups for #{class_title}</h1>
+        <div id="output"></div>
+        <form name="myform">
+          <p>
+            <input type="button" value="Shuffle" onclick="shuffle()">
+            <input type="button" value="Reset" onclick="reset()">
+          </p>
+          <p>
+            <textarea id="names" rows="30" cols="80">#{names.join("\n")}</textarea>
+        </form>
+        <p id="debug"></p>
+        <script>#{js}</script>
+           </body>
+    </html>
+    HTML
+  File.open(args['out_file'],'w') { |f|
+    f.print html
+  }
+end
+
 def self_service_hw_list(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
   hw = get_json_data_from_file_or_die(args['in_file'])
@@ -955,9 +1070,7 @@ def self_service_hw_list(args)
     boilerplate_instructions = b
   end
   unless args.has_key?('class_title') then fatal_error("args do not contain class_title key: #{JSON.generate(args)}") end
-  class_title = args['class_title']
-  if section=='m' then class_title=class_title+", Mon-Wed section" end
-  if section=='t' then class_title=class_title+", Tue-Thu section" end
+  class_title = class_title_with_section(args['class_title'],section)
 
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   title = "Homework Assignments for #{class_title}, #{semester}#{year}"
@@ -1539,4 +1652,5 @@ if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
 if $verb=="report" then report($args); clean_up_and_exit end
 if $verb=="labels" then numbers_to_labels($args); clean_up_and_exit end
 if $verb=="solutions" then solutions($args); clean_up_and_exit end
+if $verb=="groups" then groups($args); clean_up_and_exit end
 fatal_error("unrecognized verb: #{$verb}")
