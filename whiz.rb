@@ -6,7 +6,7 @@
 #   whiz.rb hw_table '{"in_file":"hw.json","out_file":"hw_table.tex","book":"lm"}'
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
 #   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb","term":"f14"}'
-#          gb_file can be null string, for fake run with only Joe Blow on roster
+#          gb_file can be null string or nonexistent file, for fake run with only Joe Blow on roster
 #   whiz.rb roster_csv '{"out_file":"roster.csv","gb_file":"foo.gb"}'
 #          gb_file can be null string, for fake run with only Joe Blow on roster
 #   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm",
@@ -27,6 +27,7 @@
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
 #     class ... select only that class; error if some students don't have class set
+#     exclude_if_class_and_flag ... e.g., ["205","c"] to exclude calc-based problems from 205
 #   optional args for points_possible and hw_table:
 #     ec_if ... list of flags (like 'c') that cause a problem to be counted as extra credit
 #   optional args for points_possible and sets_csv:
@@ -58,6 +59,14 @@ $verb = ''
 def fatal_error(message)
   $stderr.print "whiz.rb: #{$verb} fatal error: #{message}\n"
   exit(-1)
+end
+
+def warning(message)
+  $stderr.print "whiz.rb: #{$verb} warning: #{message}\n"
+end
+
+def informational_message(message)
+  $stderr.print "whiz.rb: #{$verb} informational message: #{message}\n"
 end
 
 
@@ -187,7 +196,9 @@ def resolve_labels(g)
         end
         aa = aa + label_to_list(b,parts) # label_to_list can return a list with >1 element if there's a wildcard, 0 elts if no match
       }
-      if aa.length==0 then aa = [[-1,'','']] end # later code assumes not empty list
+      if aa.length==0 then
+        aa = [[-1,'','']]
+      end # later code assumes not empty list
       aa
     }
     return g
@@ -214,7 +225,7 @@ def label_without_wildcard_to_list(label,parts)
   if $label_to_num.has_key?(label) then 
     return [$label_to_num[label] + [parts]]
   else
-    $stderr.print "warning: name #{label} not found in problems.csv\n"
+    $stderr.print "warning: name #{label} not found in problems.csv; possibly you need to make book && make problems\n"
     return []
   end
 end
@@ -391,6 +402,9 @@ def hw_to_sets(hw,book)
         probs.each { |g|
           g.each { |p|
             k = [p[0],p[1]]
+            if p[0]<0 then
+              fatal_error("in hw_to_sets, chapter=#{p[0]} for a problem on hw #{set_number}")
+            end
             label = $num_to_label[k]
             if $problem_assigned_on_set[k].nil?
               $problem_assigned_on_set[k] = set_number
@@ -485,6 +499,7 @@ def hw_table(args)
     count_paper = c[[false,false]].to_s+"+"+c[[false,true]].to_s
     count_online = c[[true,false]].to_s+"+"+c[[true,true]].to_s
     stuff = [[],[]]
+    total_problems_on_this_set = 0
     0.upto(1) { |online|
       victims = []
       set.each { |stream_group|
@@ -498,6 +513,7 @@ def hw_table(args)
           end
         }
       } # end loop over stream groups
+      total_problems_on_this_set += victims.length
       victims.sort {|u,v| spaceship_individualization_group(u[1],v[1])}.each { |v|
         flags,individualization_group = v
         d = describe_individualization_group(flags,individualization_group,'tex')
@@ -515,6 +531,9 @@ def hw_table(args)
       #{stuff[0].join(' ')} & #{stuff[1].join(' ')}
       \\end{tabular}
       TEX
+    if total_problems_on_this_set==0 then
+      $stderr.print "Warning: no problems on assignment #{set_number}\n"
+    end
   }
   tex = tex + "\\end{document}\n"
   File.open(args['out_file'],'w') { |f|
@@ -525,6 +544,7 @@ end
 # returns a hash whose keys are students' database keys, and whose
 # records are hashes with the keys last, first, class, id_string, and id_int
 # if filename is null string, returns fake roster with only blow_joe, id="0", class="210"
+# dropped students aren't included
 def get_roster_from_opengrade(gb)
   if gb=='' then
     return {"blow_joe"=>{"last"=>"Blow","first"=>"Joe","class"=>"210","id_string"=>"0","id_int"=>"0"}}
@@ -535,13 +555,15 @@ def get_roster_from_opengrade(gb)
     last = key
     if key=~/(.*)_(.*)/ then last,first=[$1.capitalize,$2.capitalize] end
     if data.has_key?('last') then last=data['last'] end
-    if data.has_key?('first') then last=data['first'] end
+    if data.has_key?('first') then first=data['first'] end
     id_string = ''
     id_int = 0
     if data.has_key?('id') then id_string=data['id']; id_int=data['id'].to_i end
     cl = ''
     if data.has_key?('class') then cl=data['class'] end
-    result[key] = {'last'=>last, 'first'=>first, 'class'=>cl, 'id_string'=>id_string, 'id_int'=>id_int }
+    if data['dropped'].nil? || data['dropped']!='true' then
+      result[key] = {'last'=>last, 'first'=>first, 'class'=>cl, 'id_string'=>id_string, 'id_int'=>id_int }
+    end
   }
   return result
 end
@@ -587,16 +609,25 @@ def md5_hash_hex(x)
 end
 
 def roster_csv(args)
-  unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}") end
-  roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
+  gb = require_arg(args,'gb_file')
+  if gb=='' then warning("can't make roster.csv, no gradebook file supplied"); return end
+  if !File.exist?(gb) then warning("can't make roster.csv, gradebook file #{gb} doesn't exist"); return end
+  roster = get_roster_from_opengrade(gb) # last, first, class, id_string, and id_int
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
+  class_values_encountered = {}
   csv = ''
   roster.keys.sort.each { |student| # FIXME -- sort won't always be right, because based on key, not last/first
     d = roster[student]
     if d['dropped'].nil? || d['dropped']!='true' then
       csv = csv + "#{student},\"#{d['last']}\",\"#{d['first']}\",#{d['class']}\n"
+      class_values_encountered[d['class']] = true
     end
-  }  
+  }
+  if class_values_encountered.has_key?('') && class_values_encountered.keys.length>1 then
+    list = []
+    roster.keys.each { |student| d=roster[student]; if d['class']=='' then list.push(student) end }
+    fatal_error("some students have class set to a non-null string, but others have a null string; fix this in opengrade; students with no class set are: #{list.join(',')}")
+  end
   File.open(args['out_file'],'w') { |f|
     f.print csv
   }
@@ -611,8 +642,10 @@ def sets_csv(args)
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
   sets = hw_to_sets(hw,book)
-  unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}") end
-  roster = get_roster_from_opengrade(args['gb_file']) # last, first, class, id_string, and id_int
+  unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}; if you don't yet have a gb file, make this parameter a null string or give a nonexistent file") end
+  gb = args['gb_file']
+  if gb!='' && !(File.exist?(gb)) then informational_message("gradebook file #{gb} doesn't exist, making fake roster"); gb='' end
+  roster = get_roster_from_opengrade(gb) # last, first, class, id_string, and id_int; if file is null string, makes fake roster
   unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
   semester,year = parse_term(args['term'])
 
@@ -655,6 +688,15 @@ def sets_csv(args)
           parts = ''
           if !(p[2].nil?) then parts = p[2].downcase end
           excluded = flags_contain_letter_in_string(flags,args['exclude_if'])
+          if !(args['exclude_if_class_and_flag'].nil?) then
+            e_class,e_flag = args['exclude_if_class_and_flag']
+            debug = false # (set_number==10 && p[0]==2 && p[1].to_i==6 && student=~/alejan/)
+            if debug then
+              # 205,c,{"c"=>true, "o"=>true},205
+              $stderr.print "#{e_class},#{e_flag},#{flags},#{roster[student]["class"]},#{roster[student]["class"].to_s==e_class}\n"
+            end
+            excluded = excluded || (roster[student]["class"].to_s==e_class and flags_contain_letter_in_string(flags,e_flag))
+          end
           f = flags_to_string(flags)
           # see comments above function for why book is always 1
           csv = csv + "#{set_number},1,#{p[0]},#{p[1]},#{parts},#{f},,#{student}\n" unless excluded
@@ -942,7 +984,10 @@ end
 def groups(args)
   out_file = require_arg(args,'out_file')
   class_title = class_title_with_section(require_arg(args,'class_title'),require_arg(args,'section'))
-  roster = get_roster_from_opengrade(require_arg(args,'gb_file')) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  gb = require_arg(args,'gb_file')
+  if gb=='' then warning("can't make random-groups generator, no gradebook file supplied"); return end
+  if !File.exist?(gb) then warning("can't make random-groups generator, gradebook file #{gb} doesn't exist"); return end
+  roster = get_roster_from_opengrade(gb) # roster["blow_joe"]={last, first, class, id_string, and id_int}
   names = []
   roster.each { |key,value|
     names.push("#{value['first']} #{value['last']}")
@@ -951,6 +996,41 @@ def groups(args)
     function random_int(n) { // random integer from 0 to n-1
       return Math.floor(n*Math.random());
     }
+    function group_number_to_label(n) {
+      return String.fromCharCode("A".charCodeAt(0)+n-1);
+    }
+    function display_student_name(nm) {
+      if (nm.length>16) {return nm.replace(new RegExp("([A-Z])[a-z]*$"),"$1.");} else {return nm}
+    }
+    function list_of_names(names) {
+      var raw_list = names.split("\\n");
+      var list = [];
+      for (var i=0; i<raw_list.length; i++) {
+        var patt = /\\w/;
+        if (/\\w/.test(raw_list[i])) {list.push(display_student_name(raw_list[i]))}
+      }
+      return list;
+    }
+    function quotemeta (str) { // http://stackoverflow.com/a/6318742
+      // http://kevin.vanzonneveld.net
+      // +   original by: Paulo Freitas
+      // *     example 1: quotemeta(". + * ? ^ ( $ )");
+      // *     returns 1: '\. \+ \* \? \^ \( \$ \)'
+      return (str + '').replace(/([\.\\\+\*\?\[\^\]\$\(\)])/g, '\\$1');
+    }
+    function random_student() {
+      var names = document.getElementById("names").value;
+      var output = document.getElementById("output");
+      var list = list_of_names(names);
+      o = output.innerHTML;
+      for (var i=0; i<=list.length-1; i++) {
+        var re = new RegExp("<b>("+quotemeta(list[i])+")</b>");
+        o = o.replace(re,"$1");
+      }
+      var re = new RegExp("("+quotemeta(list[random_int(list.length)])+")");
+      o = o.replace(re,"<b>$1</b>");
+      output.innerHTML = o;
+    }
     function shuffle() {
       var names = document.getElementById("names").value;
       var output = document.getElementById("output");
@@ -958,14 +1038,7 @@ def groups(args)
       if (!(m>=1 && m<=99)) {m=4}
       var cols = Number(document.getElementById("columns").value); // how many rows of desks
       if (!(cols>=1 && cols<=99)) {cols=5}
-      var raw_list = names.split("\\n");
-      var list = [];
-      for (var i=0; i<raw_list.length; i++) {
-        var patt = /\\w/;
-        if (/\\w/.test(raw_list[i])) {list.push(raw_list[i])}
-        //list.push(raw_list[i]);
-      }
-      //list = raw_list;
+      var list = list_of_names(names);
       var s = [];
       var used = [];
       var n = list.length;
@@ -978,8 +1051,7 @@ def groups(args)
           k = random_int(n);
         } while (used[k]);
         var nm = list[k];
-        if (nm.length>16) {nm = nm.replace(new RegExp("([A-Z])[a-z]*$"),"$1.");}
-        s.push(nm);
+        s.push(list[k]);
         used[k] = true;
       }
       var n_small = 0; // number of groups of size m-1
@@ -990,12 +1062,13 @@ def groups(args)
       var i=0;
       var t=[];
       while (i<n) {
-        var gg = "<h2>group "+g+"</h2>\\n";
+        var gg = "<h2>group "+group_number_to_label(g)+"</h2>\\n";
         var size = m;
         if (g>n_big) {size=m-1}
         //gg = gg + "size="+size;
         for (var j=1; j<=size; j++) {
-          gg = gg + s[i]+"<br>\\n";
+          var who = s[i];
+          gg = gg + j+". "+who+"<br>\\n";
           i = i+1;          
         }
         t.push(gg);
@@ -1017,6 +1090,10 @@ def groups(args)
       document.getElementById("names").value = "#{names.join("\\n")}";
     }
     JS
+  default_group_size = 4;
+  default_rows = Math::sqrt(names.length.to_f/default_group_size.to_f).to_i+1;
+  if default_rows<2 then default_rows=2 end
+  if default_rows>5 then default_rows=5 end
   html = <<-"HTML"
     <!doctype html>
     <html lang="en">
@@ -1028,8 +1105,9 @@ def groups(args)
           <p>
             <input type="button" value="Shuffle" onclick="shuffle()">
             <input type="button" value="Reset" onclick="reset()">
-            Group size: <input type="text" value="4" size="2" id="group_size">
-            Rows: <input type="text" value="5" size="2" id="columns">
+            <input type="button" value="Random student" onclick="random_student()">
+            Group size: <input type="text" value="#{default_group_size}" size="2" id="group_size">
+            Rows: <input type="text" value="#{default_rows}" size="2" id="columns">
           </p>
           <p>
             <textarea id="names" rows="30" cols="80">#{names.join("\n")}</textarea>
@@ -1119,7 +1197,9 @@ def self_service_hw_list(args)
           description = []
           individualization_group.each { |p|
             pp.push(p[1])
-            dd = p[0].to_s+"-"+describe_prob_and_parts_with_flags(p,flags,'html')
+            flags_with_s = flags.clone
+            if $has_solution[[p[0],p[1]]] then flags_with_s['s']=true end
+            dd = p[0].to_s+"-"+describe_prob_and_parts_with_flags(p,flags_with_s,'html')
             description.push(dd)
           }
           stuff.push({"chapter"=>chapter,"year"=>year,"semester"=>semester,"probs"=>pp,
