@@ -8,7 +8,7 @@
 #   whiz.rb sets_csv '{"in_file":"hw.json","out_file":"sets.csv","book":"lm","gb_file":"foo.gb","term":"f14"}'
 #          gb_file can be null string or nonexistent file, for fake run with only Joe Blow on roster
 #   whiz.rb roster_csv '{"out_file":"roster.csv","gb_file":"foo.gb"}'
-#          gb_file can be null string, for fake run with only Joe Blow on roster
+#          gb_file can be null string or nonexistent file, for fake run with only Joe Blow on roster
 #   whiz.rb self_service_hw_list '{"in_file":"hw.json","out_file":"hw.html","book":"lm",
 #                "term":"f14","boilerplate":"foo.html","class_title":"Physics 210","section":"m"}'
 #          boilerplate can be null string or name of html file to include at top
@@ -531,9 +531,7 @@ def hw_table(args)
       #{stuff[0].join(' ')} & #{stuff[1].join(' ')}
       \\end{tabular}
       TEX
-    if total_problems_on_this_set==0 then
-      $stderr.print "Warning: no problems on assignment #{set_number}\n"
-    end
+    if total_problems_on_this_set==0 then warning("no problems on assignment #{set_number}") end
   }
   tex = tex + "\\end{document}\n"
   File.open(args['out_file'],'w') { |f|
@@ -611,7 +609,7 @@ end
 def roster_csv(args)
   gb = require_arg(args,'gb_file')
   if gb=='' then warning("can't make roster.csv, no gradebook file supplied"); return end
-  if !File.exist?(gb) then warning("can't make roster.csv, gradebook file #{gb} doesn't exist"); return end
+  if !File.exist?(gb) then warning("can't make roster.csv, gradebook file #{gb} doesn't exist; creating fake roster"); gb='' end
   roster = get_roster_from_opengrade(gb) # last, first, class, id_string, and id_int
   unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   class_values_encountered = {}
