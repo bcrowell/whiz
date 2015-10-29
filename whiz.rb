@@ -16,24 +16,32 @@
 #   whiz.rb syllabus '{"tex_file":"syll.tex","out_file_stem":"syll210f14","term":"f14",
 #                            "boilerplate_dir":"../../..","class":"210","fruby":"./fruby","section":"m"}'
 #   whiz.rb report '{"in_file":"hw.json","out_file":"report","due":"due205f14.csv","sets":"sets.csv",
-#                            "reading":"reading.csv","book":"lm","out_file2":"problems_assigned"}'
+#                            "reading":"reading.csv","book":"lm","out_file2":"problems_assigned","allow_gaps":"1"}'
 #   whiz.rb labels '{"book":"lm","ch":"7","num":"1 3"}'
 #           prints out the labels for problems 7-1 and 7-3
 #   whiz.rb solutions '{"in_file":"hw.json","out_file":"solns.tex","class_title":"Physics 210","book":"lm",
 #           "sets":"sets.csv","gb_file":"foo.gb","sources_parent_dir":"/home/bcrowell/Documents/writing/books/fund/solns"}'
 #        a simple solutions generator that only provides enough features for 150A; see comments above
 #                  solutions() for a list of features it doesn't supply
+#        Add "sample":"1" to args to write solutions only for the first student in the roster; this is
+#                  useful for looking over what I've assigned, seeing if some problems sets are too long, etc.
 #   optional args for self_service_hw_list:
 #     boilerplate_instructions ... file containing html that is displayed when student first hits the page
 #   optional args for sets_csv:
 #     class ... select only that class; error if some students don't have class set
 #     exclude_if_class_and_flag ... e.g., ["205","c"] to exclude calc-based problems from 205
+#     allowed_classes ... e.g., ["206","211"]; every student must have a class from this list
 #   optional args for points_possible and hw_table:
 #     ec_if ... list of flags (like 'c') that cause a problem to be counted as extra credit
 #   optional args for points_possible and sets_csv:
 #     header ... 0 or 1; default=1=output header for csv file; used so I can concatenate 205 & 210 files
 #   optional args for points_possible, self_service_hw_list and sets_csv:
 #     exclude_if ... list of flags that cause a problem not to be assigned
+#   optional args for report
+#     allow_gaps ... 0 or 1; default=0= say the hw stream ends as soon as there's a hw without that chapter;
+#                            set to 1 for 223, where we don't go back to earlier chapters much later;
+#                            "allow" means that if there's a gap, we don't consider it the end of a stream, but
+#                            we do consider it a probable mistake that the user should be warned about
 # args are normally a JSON structure, surrounded by ''
 
 require 'tempfile'
@@ -113,6 +121,19 @@ def get_json_data_from_file_or_die(file)
   return parse_json_or_die(r[0])
 end
 
+def get_hw_from_file_or_die(file)
+  hw = get_json_data_from_file_or_die(file)
+  hw.each { |stream|
+    x = stream["stream"]
+    if stream["stream"].class!=String then
+      # This happens when I name a stream with just a section number, like 11.6. This happens because
+      # in yaml there are no quotes on the string, so it gets read as a float.
+      stream["stream"] = stream["stream"].to_s
+    end
+  }
+  return hw
+end
+
 # This can read either JSON or YAML (since JSON is a subset of YAML). If it's JSON, better to use
 # the specific JSON routine.
 def get_yaml_data_from_file_or_die(file)
@@ -135,8 +156,10 @@ end
 def read_problems_csv(book)
   if problems_csv_has_been_read then fatal_error("read_problems_csv appears to have been called more than once") end
   file = find_problems_csv(book)
+  n_good_lines = 0
   File.readlines(file).each { |line|
     if line=~/(.*),(.*),(.*),(.*),(.*)/ then
+      n_good_lines = n_good_lines+1
       b,ch,num,label,soln = [$1,$2.to_i,$3,$4,$5.to_i] # note num is string, since "number" can be like "g7"
       split_problem_number_into_letter_and_number(num) # dies with fatal error if syntax is wrong
       if b==book && label!="deleted" then
@@ -152,11 +175,13 @@ def read_problems_csv(book)
       end
    end
   }
+  if n_good_lines==0 then fatal_error("in read_problems_csv(#{book}), reading file #{file}, no good lines read") end
 end
 
 def find_problems_csv(book)
   problems_csv = '/home/bcrowell/Documents/writing/books/physics/data/problems.csv'
   if book=='fund' then problems_csv = '/home/bcrowell/Documents/writing/books/fund/problems.csv' end
+  if !File.exist?(problems_csv) then fatal_error("in find_problems_csv(#{book}), file #{problems_csv} does not exist") end
   return problems_csv
 end
 
@@ -207,7 +232,7 @@ end
 # has side effect of printing warnings to stderr if label doesn't match anything
 # returns list of [ch,num,parts]
 def label_to_list(label,parts)
-  if !problems_csv_has_been_read then fatal_error("in label_with_wildcard_to_list, problems csv has not been read") end
+  if !problems_csv_has_been_read then fatal_error("in label_to_list, problems csv has not been read") end
   unless label=~/\A[a-zA-Z0-9\-\._]*\Z/ then fatal_error("label #{label} contains illegal characters; legal ones are a-z, A-Z, 0-9, -, _") end
        # ... don't allow characters that could be confused with regexp; but do allow -, which is regexp meta char
        #     don't want confusion with regexps, because that's how we handle ... wildcard
@@ -480,7 +505,7 @@ end
 
 def hw_table(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
-  hw = get_json_data_from_file_or_die(args['in_file'])
+  hw = get_hw_from_file_or_die(args['in_file'])
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
   sets = hw_to_sets(hw,book)
@@ -543,7 +568,7 @@ end
 # records are hashes with the keys last, first, class, id_string, and id_int
 # if filename is null string, returns fake roster with only blow_joe, id="0", class="210"
 # dropped students aren't included
-def get_roster_from_opengrade(gb)
+def get_roster_from_opengrade(gb,allowed_classes=nil)
   if gb=='' then
     return {"blow_joe"=>{"last"=>"Blow","first"=>"Joe","class"=>"210","id_string"=>"0","id_int"=>"0"}}
   end
@@ -559,11 +584,18 @@ def get_roster_from_opengrade(gb)
     if data.has_key?('id') then id_string=data['id']; id_int=data['id'].to_i end
     cl = ''
     if data.has_key?('class') then cl=data['class'] end
-    if data['dropped'].nil? || data['dropped']!='true' then
+    if !(allowed_classes.nil?) && !(allowed_classes.include?(cl.to_s)) && not_dropped(data['dropped'])then
+      fatal_error("class for #{first} #{last} is set to \"#{cl}\", but allowed_classes=#{allowed_classes.join(',')}")
+    end
+    if not_dropped(data['dropped']) then
       result[key] = {'last'=>last, 'first'=>first, 'class'=>cl, 'id_string'=>id_string, 'id_int'=>id_int }
     end
   }
   return result
+end
+
+def not_dropped(d)
+  return d.nil? || d!='true'
 end
 
 # don't use this for tex output if an integral sign is desired for 'c' flag
@@ -578,7 +610,7 @@ end
 # Returns a number from 0 to n-1, where n is the length of the array probs.
 # Result depends on order of problems; don't worry about sorting this so it's more canonical, since that
 #             would be a mess to do correctly and would give no benefits.
-# This is also implemented in javascript code, in a function of the same name, embedded in whiz.eb.
+# This is also implemented in javascript code, in a function of the same name, embedded in whiz.rb.
 # Student ID is treated as a string, so don't convert it to int before passing it in (would lose leading zeroes).
 # It doesn't matter whether year is passed as fixnum or string, because it gets converted to fixnum.
 def select_using_hash(chapter,probs,year,semester,student_id)
@@ -636,14 +668,16 @@ end
 # book=1 always; nowadays only one book in xml file; OpenGrade wants a book number, which corresponds to a <toc> in the xml file
 def sets_csv(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
-  hw = get_json_data_from_file_or_die(args['in_file'])
+  hw = get_hw_from_file_or_die(args['in_file'])
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
   sets = hw_to_sets(hw,book)
+  allowed_classes = nil
+  if args.has_key?('allowed_classes') then allowed_classes=args['allowed_classes'] end
   unless args.has_key?('gb_file') then fatal_error("args do not contain gb_file key: #{JSON.generate(args)}; if you don't yet have a gb file, make this parameter a null string or give a nonexistent file") end
   gb = args['gb_file']
   if gb!='' && !(File.exist?(gb)) then informational_message("gradebook file #{gb} doesn't exist, making fake roster"); gb='' end
-  roster = get_roster_from_opengrade(gb) # last, first, class, id_string, and id_int; if file is null string, makes fake roster
+  roster = get_roster_from_opengrade(gb,allowed_classes) # last, first, class, id_string, and id_int; if file is null string, makes fake roster
   unless args.has_key?('term') then fatal_error("args do not contain term key: #{JSON.generate(args)}") end
   semester,year = parse_term(args['term'])
 
@@ -745,7 +779,7 @@ end
 
 def points_possible_to_csv(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
-  hw = get_json_data_from_file_or_die(args['in_file'])
+  hw = get_hw_from_file_or_die(args['in_file'])
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
   sets = hw_to_sets(hw,book)
@@ -1032,49 +1066,40 @@ def groups(args)
     function shuffle() {
       var names = document.getElementById("names").value;
       var output = document.getElementById("output");
-      var m = Number(document.getElementById("group_size").value); // desired group size; some will be m-1
-      if (!(m>=1 && m<=99)) {m=4}
+      var list = list_of_names(names);
+      var n = list.length;
+      var ngroups = Number(document.getElementById("ngroups").value);
+      if (!(ngroups>=1 && ngroups<=n)) {ngroups=7}
       var cols = Number(document.getElementById("columns").value); // how many rows of desks
       if (!(cols>=1 && cols<=99)) {cols=5}
-      var list = list_of_names(names);
-      var s = [];
+      var s = []; // shuffled list of students
       var used = [];
-      var n = list.length;
       for (var i=0; i<=n-1; i++) {
-        used[i-1] = false;
+        used[i] = false;
       }
       for (var i=1; i<=n; i++) {
         var k;
         do {
-          k = random_int(n);
+          k = random_int(n); // 0 to n-1
         } while (used[k]);
         var nm = list[k];
         s.push(list[k]);
         used[k] = true;
       }
-      var n_small = 0; // number of groups of size m-1
-      while ((n-n_small*(m-1))%m!=0) {n_small = n_small+1;}
-      var n_big = (n-n_small*(m-1))/m;
-      var r = "";
-      var g=1;
-      var i=0;
-      var t=[];
-      while (i<n) {
-        var gg = "<h2>group "+group_number_to_label(g)+"</h2>\\n";
-        var size = m;
-        if (g>n_big) {size=m-1}
-        //gg = gg + "size="+size;
-        for (var j=1; j<=size; j++) {
-          var who = s[i];
-          gg = gg + j+". "+who+"<br>\\n";
-          i = i+1;          
+      var t=[]; // html code for list of names in each group
+      for (var g=0; g<ngroups; g++) {
+        var gg = "<h2>group "+group_number_to_label(g+1)+"</h2>\\n";
+        for (var i=0; i<=n-1; i++) {
+          if (i%ngroups==g) {
+            var j=Math.floor(i/ngroups)+1;
+            gg = gg + j+". "+s[i]+"<br>\\n";
+          }
         }
         t.push(gg);
-        g = g+1;
       }
-      r = r+"<table>\\n<tr>\\n";
+      var r = "<table>\\n<tr>\\n";
       var col = 0;
-      for (var g=0; g<t.length; g++) {
+      for (var g=0; g<ngroups; g++) {
         if (col>=cols) {r=r+"</tr>\\n<tr>"; col=0}
         col++;
         r = r + "<td>\\n"+t[g]+"\\n</td>\\n"; // 
@@ -1088,8 +1113,10 @@ def groups(args)
       document.getElementById("names").value = "#{names.join("\\n")}";
     }
     JS
-  default_group_size = 4;
-  default_rows = Math::sqrt(names.length.to_f/default_group_size.to_f).to_i+1;
+  # ------ back to ruby code... ----------
+  default_group_size = 4
+  default_ngroups = (names.length/default_group_size+0.5).to_i
+  default_rows = Math::sqrt(names.length.to_f/default_group_size.to_f).to_i+1
   if default_rows<2 then default_rows=2 end
   if default_rows>5 then default_rows=5 end
   html = <<-"HTML"
@@ -1104,7 +1131,7 @@ def groups(args)
             <input type="button" value="Shuffle" onclick="shuffle()">
             <input type="button" value="Reset" onclick="reset()">
             <input type="button" value="Random student" onclick="random_student()">
-            Group size: <input type="text" value="#{default_group_size}" size="2" id="group_size">
+            Groups: <input type="text" value="#{default_ngroups}" size="2" id="ngroups">
             Rows: <input type="text" value="#{default_rows}" size="2" id="columns">
           </p>
           <p>
@@ -1122,7 +1149,7 @@ end
 
 def self_service_hw_list(args)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
-  hw = get_json_data_from_file_or_die(args['in_file'])
+  hw = get_hw_from_file_or_die(args['in_file'])
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
   sets = hw_to_sets(hw,book)
@@ -1297,7 +1324,7 @@ def self_service_hw_list(args)
       result = result + "<h1>Your Homework for #{class_title}, #{semester}#{year}</h2><p>This was generated for student ID "+student_id+". Please print it out.</p>";
       var re = new RegExp("^[0-9]{8,8}$");
       if (!(re.test(student_id))) {
-        result = result + "<p>******!!!!!!!! WARNING -- The student ID you've entered is not a possible Fullerton College student ID. A student ID should consist of exactly 8 digits. Don't omit leading zeroes. !!!!!!!********</p>"
+        result = result + "<p><font size='+4' color='red'><b>******!!!!!!!! WARNING -- The student ID you've entered is not a possible Fullerton College student ID. A student ID should consist of exactly 8 digits. Don't omit leading zeroes. !!!!!!!********</b></font></p>"
       }
       result = result + the_hw(student_id);
       result = result + "<p>Assignments defined #{DateTime.now.strftime "%m-%d-%Y"} for term #{semester}#{year}.</p>";
@@ -1362,6 +1389,8 @@ def temp_file
 end
 
 def syllabus(args)
+  debug = false
+  File.exist?("syll.cls") or fatal_error("file syll.cls does not exist")
   tex_file = require_arg(args,'tex_file') # syll.tex
   out_file_stem = require_arg(args,'out_file_stem')
   term = require_arg(args,'term')
@@ -1377,14 +1406,15 @@ def syllabus(args)
   g = out_file_stem+".tex";
   shell_without_capturing_output("#{fruby} #{rbtex} >#{g}",false,false)
   1.upto(2) { |i|
-    shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",false,false)
+    $stderr.print "in syllabus, debugging, running pdflatex\n" if debug
+    shell_without_capturing_output("pdflatex -interaction=nonstopmode #{g} >err",debug,false)
   }
 end
 
 # generates two output files, which I've been calling report and problems_assigned.
 def report(args)
   book = require_arg(args,'book')
-  hw = get_json_data_from_file_or_die(require_arg(args,'in_file'))
+  hw = get_hw_from_file_or_die(require_arg(args,'in_file'))
   sets = hw_to_sets(hw,book)
   stream_labels = assign_starts_of_streams_to_sets(sets,hw)
   out_file = require_arg(args,'out_file')
@@ -1392,6 +1422,7 @@ def report(args)
   due = require_arg(args,'due')
   sets_file = require_arg(args,'sets')
   reading = require_arg(args,'reading')
+  allow_gaps = (args.has_key?('allow_gaps') && args['allow_gaps'].to_i==1)
   date_to_meeting = {}
   meeting_to_date = []
   meeting_to_reading = []
@@ -1402,6 +1433,7 @@ def report(args)
   meeting_to_ch = [] # inverse of ch_to_meeting
   meeting_to_end_ch = [] # inverse of end_ch_to_meeting, multiple-valued
   problem_assigned = {} # hash of [ch,"num"]=boolean
+  debug = false
   $num_to_label.keys.each { |p|
     problem_assigned[p] = false
     if $problem_assigned_on_set.has_key?(p) then problem_assigned[p]=true end
@@ -1448,16 +1480,30 @@ def report(args)
       end
     end
   }
-  # look for end of main stream for each ch
+  if debug then debug_print_when_ch_assigned(when_ch_assigned) end
+  # look for end of main stream for each ch; for meaning of "main," see comments below about allow_gaps
   0.upto(when_ch_assigned.length-1) { |m|
     a = when_ch_assigned[m]
-    if when_ch_assigned[m+1].nil? then b=[] else b=when_ch_assigned[m+1] end
-    if !(a.nil?) then
+    if a.nil? then next end
+    if allow_gaps then
+      # class like 223, where there are usually no gaps in the stream for a particular chapter; if there is
+      # one, just warn about it
+      a.each { |ch|
+        if !(end_ch_to_meeting[ch].nil?) then # we've seen this chapter before; if there's a gap, warn the user
+          m_old = end_ch_to_meeting[ch]
+          if meeting_to_hw[m_old] < meeting_to_hw[m]-1 then warning("There is a gap in hw for ch. #{ch} between  #{meeting_to_hw[m_old]} and #{meeting_to_hw[m]}.") end
+        end
+        end_ch_to_meeting[ch] = m
+      }
+    else
+      # class like 205, where we come back to early chapters much later just to do calc problems
+      if when_ch_assigned[m+1].nil? then b=[] else b=when_ch_assigned[m+1] end
       a.each { |ch|
         if !(b.include?(ch)) && end_ch_to_meeting[ch].nil? then end_ch_to_meeting[ch]=m end
       }
     end
   }
+  if debug then debug_print_end_ch_to_meeting(end_ch_to_meeting) end
   0.upto(ch_to_meeting.length-1) { |ch|
     unless ch_to_meeting[ch].nil? then meeting_to_ch[ch_to_meeting[ch]] = ch end # assumes only start one ch/meeting
     unless end_ch_to_meeting[ch].nil? then # may end more than one ch/meeting
@@ -1541,6 +1587,21 @@ def report(args)
   }
 end
 
+def debug_print_when_ch_assigned(when_ch_assigned)
+  0.upto(when_ch_assigned.length-1) { |m|
+    a = when_ch_assigned[m] # list of chapters assigned at that meeting
+    if a.nil? then a=[] end
+    $stderr.print "meeting #{m}, -> "+a.join(',')+"\n"
+  }
+end
+
+def debug_print_end_ch_to_meeting(end_ch_to_meeting)
+  0.upto(end_ch_to_meeting.length-1) { |ch|
+    m = end_ch_to_meeting[ch]
+    $stderr.print "ch #{ch} -> meeting #{m}\n"
+  }
+end
+
 def pad_string(x,l,side)
   if x.nil? then
     y = ''
@@ -1582,13 +1643,14 @@ end
 #   - no support for different classes in the same room at the same time
 def solutions(args)
   book = require_arg(args,'book')
-  hw = get_json_data_from_file_or_die(require_arg(args,'in_file'))
+  hw = get_hw_from_file_or_die(require_arg(args,'in_file'))
   sets = hw_to_sets(hw,book)
   stream_labels = assign_starts_of_streams_to_sets(sets,hw)
   out_file = require_arg(args,'out_file')
   class_title = require_arg(args,'class_title')
   sets = require_arg(args,'sets')
   gb_file = require_arg(args,'gb_file')
+  sample = (args.has_key?('sample') && args['sample'].to_i==1)
   roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
   solution_in_book = {} # [label]=boolean
   sources_parent_dir = require_arg(args,'sources_parent_dir')
@@ -1649,6 +1711,7 @@ def solutions(args)
     first_student = true
     roster.keys.sort.each { |student|
       label_for_toc = ''
+      if sample && !first_student then break end
       if first_student then label_for_toc = "\\label{set#{hw}}" end
       tex = tex + <<-"TEX"
 
