@@ -1034,6 +1034,12 @@ def groups(args)
     function display_student_name(nm) {
       if (nm.length>16) {return nm.replace(new RegExp("([A-Z])[a-z]*$"),"$1.");} else {return nm}
     }
+    function update_roster() {
+      var names = document.getElementById("names").value;
+      var list = list_of_names(names);
+      document.getElementById("nstudents").innerHTML = list.length;
+    }
+    document.addEventListener('DOMContentLoaded', function(){ update_roster(); });
     function list_of_names(names) {
       var raw_list = names.split("\\n");
       var list = [];
@@ -1131,11 +1137,16 @@ def groups(args)
             <input type="button" value="Shuffle" onclick="shuffle()">
             <input type="button" value="Reset" onclick="reset()">
             <input type="button" value="Random student" onclick="random_student()">
+            Students: <span id="nstudents"></span>
             Groups: <input type="text" value="#{default_ngroups}" size="2" id="ngroups">
             Rows: <input type="text" value="#{default_rows}" size="2" id="columns">
           </p>
           <p>
-            <textarea id="names" rows="30" cols="80">#{names.join("\n")}</textarea>
+            <!-- http://stackoverflow.com/questions/2823733/textarea-onchange-detection -->
+            <textarea id="names" rows="30" cols="80"
+               oninput="update_roster();" onpropertychange="update_roster();" onmousemove="update_roster();"
+               onkeyup="update_roster();"
+               >#{names.join("\n")}</textarea>
         </form>
         <p id="debug"></p>
         <script>#{js}</script>
