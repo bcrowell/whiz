@@ -1,0 +1,27 @@
+CLASS = 205
+  # ... generic, applies to both 205 and 210
+SEMESTER = f15
+GB_PARENT_DIRECTORY = /home/bcrowell/Documents/teaching/grades/40_fall15
+  # ... no trailing slash
+SUFFIX = 
+   # ... can be null, or m or t for mw/tt sections, or d or e for day/eve
+GB = $(GB_PARENT_DIRECTORY)/$(CLASS)$(SUFFIX).gb
+SETS_DIR = $(GB_PARENT_DIRECTORY)/$(CLASS)$(SUFFIX).sets
+DEFAULT_BOOK = lm
+SELF_SERVICE_HW = /home/bcrowell/Lightandmatter/hw
+GROUPS = /home/bcrowell/Lightandmatter/groups
+
+BOILERPLATE = ../..
+  # ... set to ../.. if only one section
+
+WHIZ =  /home/bcrowell/Documents/programming/whiz/whiz.rb
+WHIZ_COMMON_ARGS = "book":"lm","term":"$(SEMESTER)","boilerplate":"boilerplate_for_hw.html","ec_if":"c","section":"$(SUFFIX)","exclude_if_class_and_flag":["205","c"],"allowed_classes":["205","210"]
+# ... ec_if is for 205/210 and 206/211, not other classes
+SOLNS_DIR = ~/Documents/teaching/solns
+FRUBY = ~/Documents/writing/books/physics/fruby
+
+solutions:
+	$(WHIZ) fancy_solutions '{"in_file":"hw.json","out_file":"temp.m4","class_title":"Physics 210","book":"lm","sets":"$(SETS_DIR)/sets205.csv","gb_file":"$(GB)","sources_parent_dir":"/home/bcrowell/Documents/teaching/solns",$(WHIZ_COMMON_ARGS)}'
+	m4 -P solns.m4 temp.m4 >new_solns.tex
+	pdflatex new_solns
+	pdflatex new_solns

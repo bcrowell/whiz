@@ -15,17 +15,21 @@ hw.yaml
       label of problem; in this case, can refer to problem number in text using $$
       integer: taken as an offset from the beginning of the stream
   to convert old style to this style
-    see /home/bcrowell/Documents/teaching/205/38_fall14/old_sw
-    at top and bottom of howdy block in syll.tex
-      <% book_for_conversion('lm') %> # near top, but after loading syll_schedule.rb; change 'lm' to book
-      <% write_for_conversion_finish %>
-      writes the file "converting";  hand-edit this file:
-        loses last set of problems from last chapter
-        europaperA -> europaper/A
-        o:parachutecalcc -> co:parachutecalc
-        o:slide-uphill-with-pulley* -> *o:slide-uphill-with-pulley
-        add notes
-        streams are initially constucted so that they match up one-to-one with chapters; if there are
+    new method of conversion
+      quick and dirty perl script, ~/Documents/teaching/221/41_spring2016/old_sw/convert.pl
+    original method of conversion
+      I was unable to get this to work s16 for 221.
+      see /home/bcrowell/Documents/teaching/205/38_fall14/old_sw
+      at top and bottom of howdy block in syll.tex
+        <% book_for_conversion('lm') %> # near top, but after loading syll_schedule.rb; change 'lm' to book
+        <% write_for_conversion_finish %>
+        writes the file "converting";  hand-edit this file:
+          loses last set of problems from last chapter
+          europaperA -> europaper/A
+          o:parachutecalcc -> co:parachutecalc
+          o:slide-uphill-with-pulley* -> *o:slide-uphill-with-pulley
+          add notes
+          streams are initially constucted so that they match up one-to-one with chapters; if there are
                times when there actually should be a gap in assignments from a chapter, split it into
                two streams; this happened in 205 because we go back and do calc
 flags

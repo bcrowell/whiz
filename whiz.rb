@@ -21,8 +21,10 @@
 #           prints out the labels for problems 7-1 and 7-3
 #   whiz.rb solutions '{"in_file":"hw.json","out_file":"solns.tex","class_title":"Physics 210","book":"lm",
 #           "sets":"sets.csv","gb_file":"foo.gb","sources_parent_dir":"/home/bcrowell/Documents/writing/books/fund/solns"}'
-#        a simple solutions generator that only provides enough features for 150A; see comments above
+#   whiz.rb fancy_solutions ...
+#        solutions is a simple solutions generator that only provides enough features for 150A; see comments above
 #                  solutions() for a list of features it doesn't supply
+#        fancy_solutions has more features
 #        Add "sample":"1" to args to write solutions only for the first student in the roster; this is
 #                  useful for looking over what I've assigned, seeing if some problems sets are too long, etc.
 #   optional args for self_service_hw_list:
@@ -1013,13 +1015,19 @@ def class_title_with_section(t,section)
 end
 
 #   whiz.rb groups '{"out_file":"groups.html","class_title":"Physics 210","section":"m","gb_file":"foo.gb"}'
+# If gb_file is '-', generate code with an empty roster. To do this, do a "make blank_groups" using the
+# makefile for Physics 206.
 def groups(args)
   out_file = require_arg(args,'out_file')
   class_title = class_title_with_section(require_arg(args,'class_title'),require_arg(args,'section'))
   gb = require_arg(args,'gb_file')
-  if gb=='' then warning("can't make random-groups generator, no gradebook file supplied"); return end
-  if !File.exist?(gb) then warning("can't make random-groups generator, gradebook file #{gb} doesn't exist"); return end
-  roster = get_roster_from_opengrade(gb) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  if gb!='-' then
+    if gb=='' then warning("can't make random-groups generator, no gradebook file supplied"); return end
+    if !File.exist?(gb) then warning("can't make random-groups generator, gradebook file #{gb} doesn't exist"); return end
+    roster = get_roster_from_opengrade(gb) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  else
+    roster = {''=>{'last'=>'Paste names here.','first'=>''}}
+  end
   names = []
   roster.each { |key,value|
     names.push("#{value['first']} #{value['last']}")
@@ -1028,8 +1036,13 @@ def groups(args)
     function random_int(n) { // random integer from 0 to n-1
       return Math.floor(n*Math.random());
     }
-    function group_number_to_label(n) {
-      return String.fromCharCode("A".charCodeAt(0)+n-1);
+    function group_number_to_label(n,raw_label_style) {
+      var label_style = raw_label_style.charAt(0); // first character of style string
+      if (raw_label_style.length<1) {label_style='A'}
+      if (label_style=="0" || label_style=="1") {
+        return (n-1+Number(label_style)).toString();
+      }
+      return String.fromCharCode(label_style.charCodeAt(0)+n-1);
     }
     function display_student_name(nm) {
       if (nm.length>16) {return nm.replace(new RegExp("([A-Z])[a-z]*$"),"$1.");} else {return nm}
@@ -1061,10 +1074,15 @@ def groups(args)
       var output = document.getElementById("output");
       var list = list_of_names(names);
       o = output.innerHTML;
+      // The following is pretty kludgy...
+      // Bug: the quotemeta doesn't actually seem to work properly when there are parens in the name. Symptom
+      // is that the name doesn't actually get put in bold.
+      // Remove bold from any names that were previously in bold:
       for (var i=0; i<=list.length-1; i++) {
         var re = new RegExp("<b>("+quotemeta(list[i])+")</b>");
         o = o.replace(re,"$1");
       }
+      // Put bold on a randomly chosen name:
       var re = new RegExp("("+quotemeta(list[random_int(list.length)])+")");
       o = o.replace(re,"<b>$1</b>");
       output.innerHTML = o;
@@ -1075,6 +1093,7 @@ def groups(args)
       var list = list_of_names(names);
       var n = list.length;
       var ngroups = Number(document.getElementById("ngroups").value);
+      var label_style = document.getElementById("labels").value;
       if (!(ngroups>=1 && ngroups<=n)) {ngroups=7}
       var cols = Number(document.getElementById("columns").value); // how many rows of desks
       if (!(cols>=1 && cols<=99)) {cols=5}
@@ -1094,7 +1113,7 @@ def groups(args)
       }
       var t=[]; // html code for list of names in each group
       for (var g=0; g<ngroups; g++) {
-        var gg = "<h2>group "+group_number_to_label(g+1)+"</h2>\\n";
+        var gg = "<h2>group "+group_number_to_label(g+1,label_style)+"</h2>\\n";
         for (var i=0; i<=n-1; i++) {
           if (i%ngroups==g) {
             var j=Math.floor(i/ngroups)+1;
@@ -1111,8 +1130,6 @@ def groups(args)
         r = r + "<td>\\n"+t[g]+"\\n</td>\\n"; // 
       }
       r = r+"</tr>\\n</table>\\n";
-      r = r+"<p>total: "+n+" students</p>";
-      // r = r+"<p>n_small= "+n_small+"</p>";
       output.innerHTML = r;
     }
     function reset() {
@@ -1140,6 +1157,7 @@ def groups(args)
             Students: <span id="nstudents"></span>
             Groups: <input type="text" value="#{default_ngroups}" size="2" id="ngroups">
             Rows: <input type="text" value="#{default_rows}" size="2" id="columns">
+            Labels: <input type="text" value="A" size="2" id="labels">
           </p>
           <p>
             <!-- http://stackoverflow.com/questions/2823733/textarea-onchange-detection -->
@@ -1650,7 +1668,6 @@ end
 # This lacks a bunch of fancy features that howdy supplies for physics classes:
 #   - no wide tables
 #   - can't break a problem into parts on different problem sets ("chunks")
-#   - only generates per-student solutions, not a solutions manual
 #   - no support for different classes in the same room at the same time
 def solutions(args)
   book = require_arg(args,'book')
@@ -1763,6 +1780,220 @@ def solutions(args)
   }
 end
 
+def fancy_solutions(args)
+  book = require_arg(args,'book')
+  hw = get_hw_from_file_or_die(require_arg(args,'in_file'))
+  sets = hw_to_sets(hw,book)
+  stream_labels = assign_starts_of_streams_to_sets(sets,hw)
+  out_file = require_arg(args,'out_file')
+  class_title = require_arg(args,'class_title')
+  sets = require_arg(args,'sets')
+  gb_file = require_arg(args,'gb_file')
+  sample = (args.has_key?('sample') && args['sample'].to_i==1)
+  roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  solution_in_book = {} # [label]=boolean
+  sources_parent_dir = require_arg(args,'sources_parent_dir')
+  subdir_list = []
+  Dir.chdir(sources_parent_dir) do # do block so we chdir back afterward
+    subdir_list=Dir["*"].reject{|o| not File.directory?(o)}.sort
+  end
+  probs = {}
+  n_hw_defined=0
+  header = true
+  students_encountered = {}
+  problem_labels_encountered = []
+  File.readlines(sets).each { |line|
+    if header then
+      header = false
+    else
+      # set,book,ch,num,parts,flags,chunk,student
+      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
+      hw,ch,num,student = [$1.to_i,$3.to_i,$4,$8] # no to_i on num, could be "g7"
+      if hw>n_hw_defined then n_hw_defined=hw end
+      students_encountered[student] = true
+      if probs[student].nil? then probs[student] = {} end
+      if probs[student][hw].nil? then probs[student][hw] = [] end
+      l = $num_to_label[[ch,num]]
+      if l.nil? then fatal_error("no label found for ch. #{ch}, problem #{num}") end
+      problem_labels_encountered.push(l)
+      probs[student][hw].push(l)
+    end
+  }
+  students_encountered.keys.each { |k|
+    unless roster.has_key?(k) then fatal_error("student #{k} occurs in #{sets}, but not in #{gb_file}") end
+  }
+  roster.keys.each { |k|
+    unless students_encountered.has_key?(k) then fatal_error("student #{k} occurs in #{gb_file}, but not in #{sets}") end
+  }
+  label_to_source_file = {}
+  problem_labels_encountered.each { |l|
+    p = $label_to_num[l]
+    solution_in_book[l] = $has_solution[p]
+    subdir_list.each { |d|
+      t = sources_parent_dir+"/"+d+"/"+l+".tex"
+      if File.exists?(t) then label_to_source_file[l] = t; next end
+    }
+    if !solution_in_book[l] && label_to_source_file[l].nil? then $stderr.print "warning: no solution found for #{l} in any subdirectory of #{sources_parent_dir}\n" end
+  }
+  head = <<-"HEAD"
+    \\documentclass{studentsolns}
+    \\begin{document}
+    {\\Huge\\textbf{Solutions for #{class_title}}}\\\\\n
+    HEAD
+  tail = <<-'TAIL'
+    \end{document}
+    TAIL
+  toc = ''
+  tex = ''
+  1.upto(n_hw_defined) { |hw|
+    toc = toc + "\\noindent Homework #{hw} ... \\pageref{set#{hw}}\\\\\n"
+    first_student = true
+    roster.keys.sort.each { |student|
+      label_for_toc = ''
+      if sample && !first_student then break end
+      if first_student then label_for_toc = "\\label{set#{hw}}" end
+      tex = tex + <<-"TEX"
+
+        \\pagebreak
+
+        \\vfill\\clearpage\\onecolumn\\noindent%
+        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title},
+                   #{roster[student]["first"]} #{roster[student]["last"]} }}#{label_for_toc}\\\\\n
+        \\begin{multicols*}{2}
+      TEX
+      first_student = false
+      probs[student][hw].each { |label|
+        p = $label_to_num[label]
+        if solution_in_book[label] then
+          tex = tex+solution_helper(p,'solution in the back of the book')
+        else
+          source_file = label_to_source_file[label]
+          missing = false
+          if source_file.nil?
+            missing = true
+          else
+            s,err = slurp_file_with_detailed_error_reporting(source_file)
+            if s.nil? then 
+              missing=true 
+              $stderr.print "warning: error reading file #{source_file}, #{err}"
+            else
+              s = find_figs_for_solution(label,s,p,sources_parent_dir)
+              s = clean_up_soln(s)
+              tex = tex+solution_helper(p,s)
+            end
+          end
+          if missing then
+            tex = tex+solution_helper(p,'!!!!!!!!!!! missing solution !!!!!!!!!!!!!!')
+          end
+        end
+      }
+      tex = tex + <<-"TEX"
+        \\end{multicols*}
+      TEX
+    }
+  }
+  File.open(out_file,'w') { |f|
+    f.print head+toc + "\\pagebreak" + tex+tail
+  }
+end
+
+# This function is duplicated in generate_problems.rb.
+def find_figs_for_solution(prob,orig,label,instr_dir=nil)
+  #debug = (prob=~/truck/)
+  debug = false
+  $stderr.print "in find_figs_for_solution, prob=#{prob}, instr_dir=#{instr_dir}\n" if debug
+  tex = orig.clone
+  figs_dir = nil
+  if !(instr_dir.nil?) then found,solution,figs_dir = find_instructor_solution(prob,instr_dir) end
+  macros = ["anonymousinlinefig","fig"]
+  macros.each { |m|
+    tex.gsub!(/\\#{m}{([^}]*)}/) {
+      fig_name = $1
+      f = ''
+      find = find_fig_for_problem(fig_name,figs_dir)
+      if find[0] then
+        f=find[2]
+      else
+        fatal_error("fig not found by find_figs_for_solution, prob=#{prob}, fig_name=#{fig_name}, figs_dir=#{figs_dir}")
+      end
+      $stderr.print "in find_figs_for_solution, prob=#{prob}, f=#{f}" if debug
+      result = "\n\n\\noindent\\begin{center}\\anonymousinlinefig{#{f}}\\end{center}\n\n" # narrow, not floating
+      width = fig_width(fig_name)
+      if width!='narrow' then
+        # the following is what I use in problems book for wide figs, which are floating:
+        #   result = process_fig(f,width,"Problem #{label}.",true,true,true) # floating, wide fig
+      end
+      result
+    }
+  }
+  return tex
+end
+
+# This function is different from, simpler than, the one in generate_problems.rb.
+def find_fig_for_problem(prob,files) # returns [boolean,"foo","/.../.../foo.png",width]
+  # files = a directory, can be relative, with /figs implied on the end, or absolute
+  # return value width is "narrow", "wide", or "fullpage"
+  # For exceptions to the naming convention (e.g., figures that need to be duplicated in the book
+  # in more than one place), edit fig_exceptional_naming.
+  places = []
+  if !(files.nil?) then
+    # detect whether it's relative or absolute
+    if Dir.exist?(files) then
+      places.push(files)
+    else
+      places.push($original_dir+"/../../"+files+"/figs")
+    end
+  end
+  possible_names = []
+  ['','hw-','eg-'].each { |prefix|
+    possible_names.push("#{prefix}#{prob}")
+  }
+  possible_names.each { |f|
+    places.each { |dir|
+      r = find_fig_file_in_dir(dir,f)
+      if r[0] then return r end
+    }
+  }
+  return [false,nil,nil]
+end
+
+def fig_width(f)
+  return 'narrow'
+end
+
+def find_fig_file_in_dir(dir,f) # returns [boolean,"foo","/.../.../foo.png",width]
+  # return value width is "narrow", "wide", or "fullpage"
+  ["png","jpg","pdf"].each { |type|
+    g = "#{dir}/#{f}.#{type}"
+    if File.exist?(g) then return [true,f,g,fig_width(f)] end
+  }
+  return [false,nil,nil,nil]
+end
+
+# This function is duplicated in generate_problems.rb.
+def find_instructor_solution(prob,instr_dir)
+  # returns [found,file,figs_dir]
+  found = false
+  found_file = nil
+  topics = ["intro","mechanics","waves","em-dc","em-fields","em-general","optics","relativity","quantum"]
+  topics.each { |subdir|
+    found_file = "#{instr_dir}/#{subdir}/#{prob}.tex"
+    if File.exist?(found_file) then return[true,found_file,"#{instr_dir}/#{subdir}/figs"] end
+  }
+  return [false,nil,nil]
+end
+
+# This function is duplicated in generate_problems.rb.
+def clean_up_soln(orig)
+  tex = orig.clone
+  tex.sub!(/\A\s+/,'') # eliminate leading blank lines
+  # \includegraphics{\chdir/figs/10-oclock-short} in, e.g., problem "row"
+  tex.gsub!(/\\includegraphics{\\chdir\/figs\/.*}/) {''}
+  tex.gsub!(/\\begin{forcetablelmonly}{([^}]*)}/) {"\\begin{forcesoln}{}{}{#{$1}}{}"}
+  tex.gsub!(/\\end{forcetablelmonly}/) {"\\end{forcesoln}"}
+  return tex
+end
+
 def solution_helper(p,s)
   ch,num = p
   tex = <<-"TEX"
@@ -1803,5 +2034,6 @@ if $verb=="syllabus" then syllabus($args); clean_up_and_exit end
 if $verb=="report" then report($args); clean_up_and_exit end
 if $verb=="labels" then numbers_to_labels($args); clean_up_and_exit end
 if $verb=="solutions" then solutions($args); clean_up_and_exit end
+if $verb=="fancy_solutions" then fancy_solutions($args); clean_up_and_exit end
 if $verb=="groups" then groups($args); clean_up_and_exit end
 fatal_error("unrecognized verb: #{$verb}")
