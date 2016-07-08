@@ -1684,7 +1684,7 @@ def solutions(args)
   sample = (args.has_key?('sample') && args['sample'].to_i==1)
   roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
   solution_in_book = {} # [label]=boolean
-  sources_parent_dir = require_arg(args,'sources_parent_dir')
+  sources_parent_dir = File.expand_path(require_arg(args,'sources_parent_dir'))
   subdir_list = []
   Dir.chdir(sources_parent_dir) do # do block so we chdir back afterward
     subdir_list=Dir["*"].reject{|o| not File.directory?(o)}.sort
@@ -1807,9 +1807,9 @@ def fancy_solutions(args)
   sample = (args.has_key?('sample') && args['sample'].to_i==1)
   convert_forcetablelmonly = (book != 'sn')
   solution_in_book = {} # [label]=boolean
-  sources_parent_dir = require_arg(args,'sources_parent_dir')
+  sources_parent_dir = File.expand_path(require_arg(args,'sources_parent_dir'))
   subdir_list = []
-  Dir.chdir(sources_parent_dir) do # do block so we chdir back afterward
+  Dir.chdir(File.expand_path(sources_parent_dir)) do # do block so we chdir back afterward
     subdir_list=Dir["*"].reject{|o| not File.directory?(o)}.sort
   end
   probs = {}
