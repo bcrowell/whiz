@@ -1,5 +1,7 @@
 #!/usr/bin/ruby
 
+# (c) 2016 B. Crowell, GPL v2
+
 # usage:
 #   whiz.rb verb args
 #   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"hw.json","book":"lm"}'
@@ -1789,6 +1791,10 @@ def fancy_solutions(args)
   out_file = require_arg(args,'out_file')
   class_title = require_arg(args,'class_title')
   sets = require_arg(args,'sets')
+  if args.has_key?('gb_file') && !File.exist?(args['gb_file']) then
+    warning("gradebook file #{args['gb_file']} doesn't exist, using fake roster containing only one student")
+    args.delete('gb_file')
+  end
   per_student = args.has_key?('gb_file')
   if per_student then
     gb_file = args['gb_file']
