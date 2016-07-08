@@ -13,7 +13,7 @@ DEFAULT_BOOK = me
 SELF_SERVICE_HW = .
 BOILERPLATE = .
 
-WHIZ_COMMON_ARGS = "book":"$(DEFAULT_BOOK)","term":"$(SEMESTER)","boilerplate":"boilerplate_for_hw.html""
+WHIZ_COMMON_ARGS = "book":"$(DEFAULT_BOOK)","term":"$(SEMESTER)","boilerplate":"boilerplate_for_hw.html"
 
 default:
 	@$(WHIZ) parse_hw '{"in_file":"hw.yaml","out_file":"hw.json",$(WHIZ_COMMON_ARGS)}'
