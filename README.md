@@ -3,7 +3,7 @@ Introduction
 
 Whiz is software that performs a suite of functions related to
 assigning homework from my physics textbooks. The "wh" in "whiz" is
-meant to invoke "hw" for "homework." I run it on Linux, and it should
+meant to evoke "hw" for "homework." I run it on Linux, and it should
 also work on MacOS X.
 
 The basic idea is that you write an input file listing "streams" of
