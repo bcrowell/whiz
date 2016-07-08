@@ -1793,6 +1793,7 @@ def fancy_solutions(args)
   if per_student then
     gb_file = args['gb_file']
     roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+    roster["_instructor"] = {'last'=>'', 'first'=>''}
   else
     roster = get_roster_from_opengrade('') # dummy roster with only Joe Blow in it
     fake_single_student_id = roster.keys[0] # "blow_joe"
@@ -1827,13 +1828,20 @@ def fancy_solutions(args)
       problem_labels_encountered.push(l)
       probs[student][hw].push(l) unless probs[student][hw].include?(l) 
               # ... the test is only for case where sets file contains multiple students, but per_student is false
+      if probs["_instructor"].nil? then probs["_instructor"] = {} end
+      if probs["_instructor"][hw].nil? then probs["_instructor"][hw] = [] end
+      probs["_instructor"][hw].push(l) unless probs["_instructor"][hw].include?(l) 
     end
   }
   students_encountered.keys.each { |k|
-    unless roster.has_key?(k) then fatal_error("student #{k} occurs in #{sets}, but not in #{gb_file}") end
+    unless k=="_instructor" || roster.has_key?(k) then
+      fatal_error("student #{k} occurs in #{sets}, but not in #{gb_file}")
+    end
   }
   roster.keys.each { |k|
-    unless students_encountered.has_key?(k) then fatal_error("student #{k} occurs in #{gb_file}, but not in #{sets}") end
+    unless k=="_instructor" || students_encountered.has_key?(k) then
+      fatal_error("student #{k} occurs in #{gb_file}, but not in #{sets}")
+    end
   }
   label_to_source_file = {}
   problem_labels_encountered.each { |l|
@@ -1863,7 +1871,6 @@ def fancy_solutions(args)
       label_for_toc = ''
       if sample && !first_student then break end
       if first_student then label_for_toc = "\\label{set#{hw}}" end
-      if per_student then student_name=", #{roster[student]["first"]} #{roster[student]["last"]}" else student_name="" end
       first_student = false
       wide_accum = '' # accumulate all wide material like force tables, which go at the bottom
       body = ''
@@ -1903,6 +1910,15 @@ def fancy_solutions(args)
         multicols = 'multicols' # don't allow uneven columns; conserve space so tables fit
       else
         multicols = 'multicols*' # allow uneven columns
+      end
+      if per_student then
+        if student=="_instructor" then
+          student_name = ", instructor's copy"
+        else
+          student_name=", #{roster[student]["first"]} #{roster[student]["last"]}" 
+        end
+      else
+        student_name=""
       end
       tex = tex + <<-"TEX"
 
