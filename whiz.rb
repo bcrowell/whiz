@@ -25,6 +25,7 @@
 #        solutions is a simple solutions generator that only provides enough features for 150A; see comments above
 #                  solutions() for a list of features it doesn't supply
 #        fancy_solutions has more features
+#        If gb_file isn't supplied to fancy_solutions, it generates generic solutions rather than individualized ones.
 #        Add "sample":"1" to args to write solutions only for the first student in the roster; this is
 #                  useful for looking over what I've assigned, seeing if some problems sets are too long, etc.
 #   optional args for self_service_hw_list:
@@ -1788,9 +1789,16 @@ def fancy_solutions(args)
   out_file = require_arg(args,'out_file')
   class_title = require_arg(args,'class_title')
   sets = require_arg(args,'sets')
-  gb_file = require_arg(args,'gb_file')
+  per_student = args.has_key?('gb_file')
+  if per_student then
+    gb_file = args['gb_file']
+    roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  else
+    roster = get_roster_from_opengrade('') # dummy roster with only Joe Blow in it
+    fake_single_student_id = roster.keys[0] # "blow_joe"
+  end
   sample = (args.has_key?('sample') && args['sample'].to_i==1)
-  roster = get_roster_from_opengrade(gb_file) # roster["blow_joe"]={last, first, class, id_string, and id_int}
+  convert_forcetablelmonly = (book != 'sn')
   solution_in_book = {} # [label]=boolean
   sources_parent_dir = require_arg(args,'sources_parent_dir')
   subdir_list = []
@@ -1809,6 +1817,7 @@ def fancy_solutions(args)
       # set,book,ch,num,parts,flags,chunk,student
       unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
       hw,ch,num,student = [$1.to_i,$3.to_i,$4,$8] # no to_i on num, could be "g7"
+      if !per_student then student=fake_single_student_id end
       if hw>n_hw_defined then n_hw_defined=hw end
       students_encountered[student] = true
       if probs[student].nil? then probs[student] = {} end
@@ -1816,7 +1825,8 @@ def fancy_solutions(args)
       l = $num_to_label[[ch,num]]
       if l.nil? then fatal_error("no label found for ch. #{ch}, problem #{num}") end
       problem_labels_encountered.push(l)
-      probs[student][hw].push(l)
+      probs[student][hw].push(l) unless probs[student][hw].include?(l) 
+              # ... the test is only for case where sets file contains multiple students, but per_student is false
     end
   }
   students_encountered.keys.each { |k|
@@ -1852,18 +1862,21 @@ def fancy_solutions(args)
       label_for_toc = ''
       if sample && !first_student then break end
       if first_student then label_for_toc = "\\label{set#{hw}}" end
+      if per_student then student_name=", #{roster[student]["first"]} #{roster[student]["last"]}" else student_name="" end
       tex = tex + <<-"TEX"
 
         \\pagebreak
 
+        % student = #{student}
         \\vfill\\clearpage\\onecolumn\\noindent%
-        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title},
-                   #{roster[student]["first"]} #{roster[student]["last"]} }}#{label_for_toc}\\\\\n
+        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title}#{student_name}}}#{label_for_toc}\\\\\n
         \\begin{multicols*}{2}
       TEX
       first_student = false
+      wide_accum = '' # accumulate all wide material like force tables, which go at the bottom
       probs[student][hw].each { |label|
         p = $label_to_num[label]
+        prob_num = p.join('-')
         if solution_in_book[label] then
           tex = tex+solution_helper(p,'solution in the back of the book')
         else
@@ -1878,6 +1891,9 @@ def fancy_solutions(args)
               $stderr.print "warning: error reading file #{source_file}, #{err}"
             else
               s = find_figs_for_solution(label,s,p,sources_parent_dir)
+              normal,wide = handle_wide_material(s,convert_forcetablelmonly,prob_num)
+              wide_accum = wide_accum+wide
+              s = normal
               s = clean_up_soln(s)
               tex = tex+solution_helper(p,s)
             end
@@ -1889,12 +1905,36 @@ def fancy_solutions(args)
       }
       tex = tex + <<-"TEX"
         \\end{multicols*}
+        #{clean_up_soln(wide_accum)}
       TEX
     }
   }
   File.open(out_file,'w') { |f|
     f.print head+toc + "\\pagebreak" + tex+tail
   }
+end
+
+# pull out material like force tables that is two columns wide and needs to go at the end
+def handle_wide_material(orig,convert_forcetablelmonly,problem_number)
+  tex = orig.clone
+  tex.gsub!(/\\begin{forcesoln}{([^}]*)}{([^}]*)}{([^}]*)}/) {"See table below.\\begin{forcetable}{#{$3}}___#{$2}___"}
+  tex.gsub!(/\\end{forcesoln}/) {"\\end{forcetable}"}
+  if convert_forcetablelmonly then tex.gsub!(/forcetablelmonly/) {'forcetable'} end
+  main = ''
+  wide = ''
+  inside = false
+  tex.split(/\\(?:begin|end){forcetable}/).each { |piece|
+    if inside then
+      prefatory = "\\vspace{3mm}\\par\\noindent Analysis of forces for problem #{problem_number}\\\\*"
+      if piece=~/___([^_]*)___/ then prefatory=prefatory + $1 end
+      piece.gsub!(/___([^_]*)___/) {''}
+      wide = wide + "\\begin{samepage}#{prefatory}\\begin{forcetable}#{piece}\\end{forcetable}\\end{samepage}"
+    else
+      main = main + piece
+    end
+    inside = !inside
+  }
+  return main,wide
 end
 
 # This function is duplicated in generate_problems.rb.
@@ -1988,7 +2028,7 @@ def clean_up_soln(orig)
   tex = orig.clone
   tex.sub!(/\A\s+/,'') # eliminate leading blank lines
   # \includegraphics{\chdir/figs/10-oclock-short} in, e.g., problem "row"
-  tex.gsub!(/\\includegraphics{\\chdir\/figs\/.*}/) {''}
+  tex.gsub!(/\\includegraphics{\\chdir\/figs\/([^}]*)}/) {$1} # fixme
   tex.gsub!(/\\begin{forcetablelmonly}{([^}]*)}/) {"\\begin{forcesoln}{}{}{#{$1}}{}"}
   tex.gsub!(/\\end{forcetablelmonly}/) {"\\end{forcesoln}"}
   return tex
