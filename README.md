@@ -3,7 +3,8 @@ Introduction
 
 Whiz is software that performs a suite of functions related to
 assigning homework from my physics textbooks. The "wh" in "whiz" is
-meant to invoke "hw" for "homework."
+meant to invoke "hw" for "homework." I run it on Linux, and it should
+also work on MacOS X.
 
 The basic idea is that you write an input file listing "streams" of
 problems. For example, if you do a topic such as statics, the stream
@@ -77,7 +78,7 @@ problems. For example, every student will be assigned either geometric-mean or t
 The semicolon separates online problems from problems that are human-graded. The problems
 before the semicolon are human-graded (the default). After the semicolon, the prefix "o:"
 says that these problems are online. Problems can also be marked with a star to show that
-they are extra credit, as in line 9, where the prefixc "*o:" says that the problem
+they are extra credit, as in line 9, where the prefix "*o:" says that the problem
 gamma-derivation is an extra-credit online problem.
 
 It is possible to place notes in the homework printout that the student receives. An example is
@@ -87,3 +88,42 @@ below the list of problems for the relevant homework assignment reading "Extra-c
 
 Installing
 ==========
+
+The following instructions are written for Linux, but should also work
+with minor modifications for MacOS X.
+
+Install the following open-source software: git, ruby, m4, gnu make, latex. On a debian-based
+system, this can be done with the following command:
+
+    sudo apt-get install git-core ruby m4 make texlive-full texlive-math-extra 
+
+If you're using MacOS, you may have BSD make installed. I don't know if that works. If it
+doesn't, you need to install gnu make, and invoke it using "gmake" rather than "make" as
+in the examples below.
+
+Download whiz:
+
+    git clone https://github.com/bcrowell/whiz.git
+
+If you want to generate handouts of solutions, download their source code. To get access to this,
+you will need to create an account on github and then email me to give your account access.
+
+    git clone https://github.com/bcrowell/lm-solutions
+
+Download the data file problems.csv giving the names of all the problems:
+
+    curl -L -O https://raw.githubusercontent.com/bcrowell/lm/master/data/problems.csv
+
+You should now have directories called whiz and lm-solutions inside your current working directory.
+Get into the directory whiz/sample. Edit the file Makefile. Near the top are two lines like this:
+
+    WHIZ =  ~/foo/whiz/whiz.rb            
+    SOLNS_DIR = ~/foo/lm-solutions
+
+Change "foo" to whatever is appropriate so that these point to the file whiz.rb and the
+directory in which you've downloaded the solutions. Make whiz.rb executable by doing something
+like this:
+
+    chmod +x ~/foo/whiz/whiz.rb
+
+(changing "foo" as appropriate).

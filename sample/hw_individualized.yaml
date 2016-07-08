@@ -1,0 +1,24 @@
+- stream: measurement
+  delay: 0
+  chunks:
+  - "geometric-mean|triangle-formula,sars|pretzels ; o:furlongs|micrograms|estrogen"
+  notes:
+    0: "FAQs about Spotter: (1) The full statement of the question is in the book, not in Spotter. (2) Spotter has every problem, not just the ones assigned to you."
+- stream: velocity in one dimension
+  delay: 0
+  chunks:
+  - "bounce-graph,chain-rule-units ; o:honeybeecalculus"
+  - "eowyn|decel-accel-frames ; o:freddifish|door-closer,expanding-metal-square|observable-universe ; *o:gamma-derivation"
+  gamma-derivation: Extra-credit problem $$ assumes that you have read optional section 2.7.
+- stream: estimation
+  delay: 1
+  chunks:
+  - "jelly-beans,liter-cube|square-mm-to-cm|light-bucket|martini,bodyvolume|grass|e-coli"
+  - "richter,chip|apartments|bongoburgers|hairmass ; o:lasf|cd-hole|insect-x-ray|seti-volume|mars-land-area|golf-ball-packing"
+  - "*:et-tu|plutonium-in-oceans"
+- stream: acceleration in one dimension
+  delay: 0
+  chunks:
+  - "stupid,honeybeeaccel,x-graph-to-v-graph"
+  - "two-ramps|graph-bouncing,caracceleration|dropandthrow|ramp,mars-drop-time|ramp-half-speed,estimate-flea-accel|railgun ; o:well|alice,astronaut-jumping,droppingballs"
+  - "*:vee-track-minimum-time,galileo-chord-of-circle ; o:stride|punch|aircraft-carrier|baseball-pitch-ratios|high-speed-chase,alphac|parachutecalc"

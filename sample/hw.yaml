@@ -1,0 +1,21 @@
+- stream: measurement
+  delay: 0
+  chunks:
+  - "geometric-mean ; o:estrogen"
+- stream: velocity in one dimension
+  delay: 0
+  chunks:
+  - "bounce-graph,chain-rule-units ; o:honeybeecalculus"
+  - "eowyn ; o:door-closer,observable-universe"
+- stream: estimation
+  delay: 1
+  chunks:
+  - "jelly-beans,martini,grass"
+  - "hairmass ; o:golf-ball-packing"
+  - "*:plutonium-in-oceans"
+- stream: acceleration in one dimension
+  delay: 0
+  chunks:
+  - "stupid,honeybeeaccel,x-graph-to-v-graph"
+  - "two-ramps,mars-drop-time,estimate-flea-accel ; o:well,astronaut-jumping"
+  - "*:vee-track-minimum-time,galileo-chord-of-circle ; o:stride,alphac"
