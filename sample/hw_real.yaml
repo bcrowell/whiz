@@ -1,0 +1,123 @@
+- stream: ch 0
+  delay: 0
+  chunks:
+  - "geometric-mean|triangle-formula,sars|pretzels ; o:furlongs|micrograms|estrogen"
+  notes:
+    0: "FAQs about Spotter: (1) The full statement of the question is in the book, not in Spotter. (2) Spotter has every problem, not just the ones assigned to you."
+- stream: ch 2 - SSD
+  delay: 0
+  chunks:
+  - "bounce-graph,chain-rule-units ; o:honeybeecalculus"
+  - "eowyn|decel-accel-frames ; o:freddifish|door-closer,expanding-metal-square|observable-universe ; *o:gamma-derivation"
+  gamma-derivation: Extra-credit problem $$ assumes that you have read optional section 2.7.
+- stream: ch 1
+  delay: 1
+  chunks:
+  - "jelly-beans,liter-cube|square-mm-to-cm|light-bucket|martini,bodyvolume|grass|e-coli"
+  - "richter,chip|apartments|bongoburgers|hairmass ; o:lasf|cd-hole|insect-x-ray|seti-volume|mars-land-area|golf-ball-packing"
+  - "*:et-tu|plutonium-in-oceans"
+- stream: ch 3 - SSD
+  delay: 0
+  chunks:
+  - "stupid,honeybeeaccel,x-graph-to-v-graph"
+  - "two-ramps|graph-bouncing,caracceleration|dropandthrow|ramp,mars-drop-time|ramp-half-speed,estimate-flea-accel|railgun ; o:well|alice,astronaut-jumping,droppingballs"
+  - "*:vee-track-minimum-time,galileo-chord-of-circle ; o:stride|punch|aircraft-carrier|baseball-pitch-ratios|high-speed-chase,alphac|parachutecalc"
+- stream: ch 4 - SSD
+  delay: 3
+  chunks:
+  - "time-to-brake"
+  - "noforces|trailer|anvilshears,mass-or-weight ; o:elevatortension,sally-spacehound|copter|alphastopping,blimp"
+  - "o:highjump,langley-catapult|formula-one-tires"
+- stream: ch 5
+  delay: 1
+  chunks:
+  - "third-law-partners,box-uphill-partners,waterbottle-in-space ; o:atwood"
+  - "magnetundercar|nonormal|row|cowcrush|airplaneforces,oldlady|earthaccelup|gravityvsnormal,kineticstrongerthanstatic|rice-sticks|scaleoscillation|baseballparadox ; o:elevator|coasting-skater|skidmarks"
+  - "tractormadness ; o:tugboat|stacked-blocks|crevasse|dogsled"
+  - "o:three-pulleys|other-pulleys ; *o:skier-hits-dirt"
+  - "*o:evil-pulleys"
+- stream: ch 6
+  delay: 2
+  chunks:
+  - "niagara|misslettuce ; o:baseballpitch|cliff-pond"
+  - "baseballrange ; o:speedbump|tossup"
+- stream: ch 7
+  delay: 1
+  chunks:
+  - "tiptotail,sine-of-vector ; o:bangkok,walking|drill"
+  - "vector-plus-scalar,baseballrangeair"
+- stream: ch 8
+  delay: 1
+  chunks:
+  - "oppositevanda|hurricane-track,annie-oakley,fossil,cargo-plane ; o:bird,layback ; *o:skee-ball"
+  - "cartesianbullet,angle-of-repose ; o:labrolling,tightrope|climbing-anchors,skier|pressblock|deer"
+  - "wagon-uphill ; o:death-triangle|telephone-wire ; *o:slide-uphill-optimization"
+  - "*:capstan ; o:wedge-yanked-away|ropeslopes|slide-uphill-with-pulley"
+- stream: ch 9
+  delay: 1
+  chunks:
+  - "circularaccelunits"
+  - "tilt-a-whirl,off-ramp ; o:loop,sirius-centrifugal"
+  - "paradox|mixer ; o:train,rodent|conicalpendulum|wall-of-death"
+  - "o:circling-blocks ; *:governor|bead-on-vee|spiral-terminal-velocity"
+- stream: ch 10
+  delay: 2
+  chunks:
+  - "ceres"
+  - "alien-gangster|upsilon-andromedae,prove-a-equals-g ; o:laurie"
+  - "receding-moon ; o:rocketweight|extrasolar|mars-trip,earthmooncancellation|eclipse,galacticcenter|geosynch|rotatinggravitatingbody|ground-skimming,uranus|iss-g"
+  - "mineshaft-half-way-to-center|earth-layers ; o:moon2|new-horizons,escapevelocity ; *:alternateuniverse|collapse-time-scaling|constant-density-maximum-gravity|shell-theorem-inside|shell-theorem-exponent|shell-theorem-outside-only"
+- stream: ch 11
+  delay: 1
+  chunks:
+  - "negativeke|sprinter,bulletthroughbook,boatengine|aronskeratio"
+  - "o:crash|columbia"
+  - "wind-power|colliding-balls,earthmoonke ; o:melt-and-boil|astronaut"
+- stream: ch 12
+  delay: 1
+  chunks:
+  - "maxkepe,grasshopper"
+  - "throw-down-and-up|negativepe|sweat,slidingmagnets ; o:bikeloop,honeymoon|boilbucket,atwood-energy ; *:skater-rolls-off-pipe"
+  - "*o:freeneutron,jack-on-hill"
+  notes:
+    freeneutron: Extra-credit problem $$ assumes that you have read optional section 12.4.
+- stream: ch 13
+  delay: 2
+  chunks:
+  - "stoppingdistances,posnegwork|workreverseaxis|microwaveice|bubba ; o:compound-bow|horsepower-calculus|contracting-muscle,heliumescape,keconstantaccel"
+  - "o:escape-velocity,yukawa|magnetpe|railgun-friction,anglebetween,ant|maserati ; perp-in-plane"
+  - "dot-product-invariant|dot-product-by-components ; o:crosswind"
+- stream: ch 14 - SSD
+  delay: 1
+  chunks:
+  - "o:keintermsofp,three-to-one-collision"
+  - "firework ; o:gun,rocket"
+  - "hockey-pucks,recoil-double-speed ; o:planes ; *o:vintermsofp"
+  - "o:max-heat-released-in-collision ; *:exhaust|rope-over-edge"
+  notes:
+    vintermsofp: Extra-credit problem $$ assumes that you have read optional section 14.7.
+    three-to-one-collision: Problem $$ describes part G of today's lab. You can work on it during lab.
+- stream: ch 15
+  delay: 3
+  chunks:
+  - "motorcycle-jump|zero-and-nonzero-p-and-l|pandl"
+  - "const-l-no-torques,orbital-bomb ; o:rv|therapy"
+  - "two-branches,tetherball,check-mg-at-cm,equilibrium-top-of-arc"
+  - "wheel-over-step|barandrope,alternate-universe ; o:tiptoe,rod-finger-string"
+  - "ship-in-bottle,rolling-ratio,anganalogies,molecules,tipbox|hangingbars|hinge-on-cylinder ; o:whitedwarf,earthangkinematics"
+  - "bowling,xnotassociative,xnonsense ; o:amcrossprodplugin,findperp,centrifuge ; *:books-at-edge-of-table"
+  - "yoyo,parallel-axis-theorem ; *:boxmoi"
+  - "*:conemoi,ellipsoidmoi|triangle-moment-of-inertia"
+  notes:
+    ellipsoidmoi: Extra-credit problem $$ assumes that you have read the end of section 15.8.
+- stream: ch 16
+  delay: 6
+  chunks:
+  - "shm-units ; o:sperm,whistle"
+  - "pendulum|oblate-earth ; o:piston,bobbing|codornices|pulleyandspring|shmanalogy"
+  - "o:vibtransverse"
+- stream: ch 17
+  delay: 1
+  chunks:
+  - "stereopower,swimbladder"
+  - "qcorrection|maxampatdc,qproof|spider-oscillations"

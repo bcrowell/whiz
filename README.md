@@ -127,3 +127,29 @@ like this:
     chmod +x ~/foo/whiz/whiz.rb
 
 (changing "foo" as appropriate).
+
+The sample input file hw.yaml contains a simple example. (There are some other sample
+files called hw*.yaml.) Do the command
+
+    make
+
+to read the input file hw.yaml and produce a file hw_table.pdf that shows what problems
+are assigned on which homeworks. Because the homework assignments in the simple example
+file don't contain any individualized homework, this file is something you could hand out
+to your students to tell them what they're assigned. However, it also contains some notations
+that are meant to be convenient for you. A subscript S means that the problem has a solution
+in the back of the book. Underlining means that the problem has to be graded
+by hand because it's not something that can be checked by a computer and it's not a problem whose
+solution is in the back of the book. A notation like "online 2+1" means that in the online homework,
+2 problems are required and 1 is extra credit.
+
+To generate solutions handouts, do:
+
+    make solutions
+
+Fancy features
+==============
+
+There is more fancy functionality such as individualized homework and interfacing to my
+open-source gradebook program OpenGrade. This functionality is only documented in the
+comments at the top of the source code for Whiz.
