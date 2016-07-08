@@ -187,7 +187,7 @@ def read_problems_csv(book)
 end
 
 def find_problems_csv(book)
-  if $args.key?("problems_csv") then return $args['problems_csv'] end
+  if $args.key?("problems_csv") then return File.expand_path($args['problems_csv']) end
   problems_csv = '/home/bcrowell/Documents/writing/books/physics/data/problems.csv'
   if book=='fund' then problems_csv = '/home/bcrowell/Documents/writing/books/fund/problems.csv' end
   warning("problems_csv should be specified in the file whiz.config, or in the command-line arguments; trying a default, #{problems_csv}, which is probably wrong for you")

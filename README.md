@@ -117,7 +117,7 @@ Download the data file problems.csv giving the names of all the problems:
 You should now have directories called whiz and lm-solutions inside your current working directory.
 In the whiz directory, there should be a file whiz.config containing a line like this:
 
-    "problems_csv":"/home/bcrowell/Documents/writing/books/physics/data/problems.csv"
+    "problems_csv":"~/Documents/writing/books/physics/data/problems.csv"
 
 Change the filename so that it points to the place where you downloaded the file problems.csv
 earlier.
