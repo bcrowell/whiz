@@ -2103,7 +2103,7 @@ end
 config_file = File.expand_path(File.dirname(__FILE__))+"/whiz.config"
   # ... file named "whiz.config" in the directory that the current script resides in
 if File.exist?(config_file) then
-  defaults = parse_json_or_die(config_file)
+  defaults = get_json_data_from_file_or_die(config_file)
   $args = defaults.merge($args)
 end
 
