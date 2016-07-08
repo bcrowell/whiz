@@ -23,8 +23,9 @@ default:
 	@$(WHIZ) sets_csv '{"in_file":"hw.json","out_file":"sets.csv","gb_file":"",$(WHIZ_COMMON_ARGS)}'
 
 solutions:
+	cp ../solutions/studentsolns.cls .
 	$(WHIZ) fancy_solutions '{"gb_file":"","in_file":"hw.json","out_file":"temp.m4","class_title":"Physics $(CLASS)","book":"me","sets":"sets.csv","sources_parent_dir":"$(SOLNS_DIR)",$(WHIZ_COMMON_ARGS)}'
-	m4 -P solns.m4 temp.m4 >solns$(CLASS).tex
+	m4 -P $(SOLNS_DIR)/solns.m4 temp.m4 >solns$(CLASS).tex
 	pdflatex solns$(CLASS)
 	pdflatex solns$(CLASS)
 

@@ -147,6 +147,8 @@ To generate solutions handouts, do:
 
     make solutions
 
+The output is in the file solns221.pdf.
+
 Fancy features
 ==============
 
