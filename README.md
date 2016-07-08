@@ -115,6 +115,13 @@ Download the data file problems.csv giving the names of all the problems:
     curl -L -O https://raw.githubusercontent.com/bcrowell/lm/master/data/problems.csv
 
 You should now have directories called whiz and lm-solutions inside your current working directory.
+In the whiz directory, there should be a file whiz.config containing a line like this:
+
+    "problems_csv":"/home/bcrowell/Documents/writing/books/physics/data/problems.csv"
+
+Change the filename so that it points to the place where you downloaded the file problems.csv
+earlier.
+
 Get into the directory whiz/sample. Edit the file Makefile. Near the top are two lines like this:
 
     WHIZ =  ~/foo/whiz/whiz.rb            
@@ -127,6 +134,10 @@ like this:
     chmod +x ~/foo/whiz/whiz.rb
 
 (changing "foo" as appropriate).
+
+
+Doing a sample file
+===================
 
 The sample input file hw.yaml contains a simple example. (There are some other sample
 files called hw*.yaml.) Do the command

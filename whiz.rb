@@ -2,8 +2,11 @@
 
 # (c) 2016 B. Crowell, GPL v2
 
-# usage:
+# generic usage:
 #   whiz.rb verb args
+# configuration file:
+#   whiz.config -- in the same directory as whiz.rb; this is normally where we define problems_csv
+# specific functions:
 #   whiz.rb parse_hw '{"in_file":"foo.yaml","out_file":"hw.json","book":"lm"}'
 #   whiz.rb hw_table '{"in_file":"hw.json","out_file":"hw_table.tex","book":"lm"}'
 #   whiz.rb points_possible '{"in_file":"hw.json","out_file":"points_possible.csv","book":"lm"}'
@@ -184,8 +187,10 @@ def read_problems_csv(book)
 end
 
 def find_problems_csv(book)
+  if $args.key?("problems_csv") then return $args['problems_csv'] end
   problems_csv = '/home/bcrowell/Documents/writing/books/physics/data/problems.csv'
   if book=='fund' then problems_csv = '/home/bcrowell/Documents/writing/books/fund/problems.csv' end
+  warning("problems_csv should be specified in the file whiz.config, or in the command-line arguments; trying a default, #{problems_csv}, which is probably wrong for you")
   if !File.exist?(problems_csv) then fatal_error("in find_problems_csv(#{book}), file #{problems_csv} does not exist") end
   return problems_csv
 end
@@ -2093,6 +2098,13 @@ def clean_up_and_exit
     FileUtils.rm(file)
   }
   exit(0)
+end
+
+config_file = File.expand_path(File.dirname(__FILE__))+"/whiz.config"
+  # ... file named "whiz.config" in the directory that the current script resides in
+if File.exist?(config_file) then
+  defaults = parse_json_or_die(config_file)
+  $args = defaults.merge($args)
 end
 
 if $verb=="parse_hw" then parse_hw($args); clean_up_and_exit end
