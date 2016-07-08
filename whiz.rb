@@ -1856,6 +1856,7 @@ def fancy_solutions(args)
   toc = ''
   tex = ''
   1.upto(n_hw_defined) { |hw|
+    figs_dir = ''
     toc = toc + "\\noindent Homework #{hw} ... \\pageref{set#{hw}}\\\\\n"
     first_student = true
     roster.keys.sort.each { |student|
@@ -1863,22 +1864,16 @@ def fancy_solutions(args)
       if sample && !first_student then break end
       if first_student then label_for_toc = "\\label{set#{hw}}" end
       if per_student then student_name=", #{roster[student]["first"]} #{roster[student]["last"]}" else student_name="" end
-      tex = tex + <<-"TEX"
-
-        \\pagebreak
-
-        % student = #{student}
-        \\vfill\\clearpage\\onecolumn\\noindent%
-        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title}#{student_name}}}#{label_for_toc}\\\\\n
-        \\begin{multicols*}{2}
-      TEX
       first_student = false
       wide_accum = '' # accumulate all wide material like force tables, which go at the bottom
+      body = ''
       probs[student][hw].each { |label|
         p = $label_to_num[label]
         prob_num = p.join('-')
+        garbage1,garbage2,figs_dir = find_instructor_solution(label,sources_parent_dir)
+             # ... need figs_dir for stuff like arrows
         if solution_in_book[label] then
-          tex = tex+solution_helper(p,'solution in the back of the book')
+          body = body+solution_helper(p,'solution in the back of the book')
         else
           source_file = label_to_source_file[label]
           missing = false
@@ -1894,18 +1889,32 @@ def fancy_solutions(args)
               normal,wide = handle_wide_material(s,convert_forcetablelmonly,prob_num)
               wide_accum = wide_accum+wide
               s = normal
-              s = clean_up_soln(s)
-              tex = tex+solution_helper(p,s)
+              s = clean_up_soln(s,figs_dir)
+              body = body+solution_helper(p,s)
             end
           end
           if missing then
-            tex = tex+solution_helper(p,'!!!!!!!!!!! missing solution !!!!!!!!!!!!!!')
+            body = body+solution_helper(p,'!!!!!!!!!!! missing solution !!!!!!!!!!!!!!')
           end
         end
       }
+      have_wide_stuff = (wide_accum!='')
+      if have_wide_stuff then
+        multicols = 'multicols' # don't allow uneven columns; conserve space so tables fit
+      else
+        multicols = 'multicols*' # allow uneven columns
+      end
       tex = tex + <<-"TEX"
-        \\end{multicols*}
-        #{clean_up_soln(wide_accum)}
+
+        \\pagebreak
+
+        % student = #{student}
+        \\vfill\\clearpage\\onecolumn\\noindent%
+        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title}#{student_name}}}#{label_for_toc}\\\\\n
+        \\begin{#{multicols}}{2}
+        #{body}
+        \\end{#{multicols}}
+        #{clean_up_soln(wide_accum,figs_dir)}
       TEX
     }
   }
@@ -2024,11 +2033,11 @@ def find_instructor_solution(prob,instr_dir)
 end
 
 # This function is duplicated in generate_problems.rb.
-def clean_up_soln(orig)
+def clean_up_soln(orig,figs_dir)
   tex = orig.clone
   tex.sub!(/\A\s+/,'') # eliminate leading blank lines
   # \includegraphics{\chdir/figs/10-oclock-short} in, e.g., problem "row"
-  tex.gsub!(/\\includegraphics{\\chdir\/figs\/([^}]*)}/) {$1} # fixme
+  tex.gsub!(/\\includegraphics{\\chdir\/figs\/([^}]*)}/) {"\\includegraphics{#{figs_dir}/#{$1}}"} # fixme
   tex.gsub!(/\\begin{forcetablelmonly}{([^}]*)}/) {"\\begin{forcesoln}{}{}{#{$1}}{}"}
   tex.gsub!(/\\end{forcetablelmonly}/) {"\\end{forcesoln}"}
   return tex
