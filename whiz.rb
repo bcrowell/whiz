@@ -260,7 +260,7 @@ def label_without_wildcard_to_list(label,parts)
   if $label_to_num.has_key?(label) then 
     return [$label_to_num[label] + [parts]]
   else
-    $stderr.print "warning: name #{label} not found in problems.csv; possibly you need to make book && make problems\n"
+    $stderr.print "warning: name #{label} not found in problems.csv; possibly you need to do a make book, which automatically updates problems.csv if you have a new problem\n"
     return []
   end
 end
@@ -359,10 +359,17 @@ end
 
 # used for sorting output; has to deal with "numbers" like g7, not just integers
 # compare "3" < "7", "g7" < "h3", etc.
+# Inputs are strings that don't include the chapter number.
 def spaceship_problem_number(x,y)
   u = split_problem_number_into_letter_and_number(x)
   v = split_problem_number_into_letter_and_number(y)
   if u[0]!=v[0] then return u[0]<=>v[0] else return u[1]<=>v[1] end
+end
+
+def spaceship_problem_label(l,m)
+  u = $label_to_num[l]
+  v = $label_to_num[m]
+  if u[0]!=v[0] then return u[0]<=>v[0] else return spaceship_problem_number(u[1],v[1]) end
 end
 
 # has to deal with "numbers" like g7, not just integers
@@ -482,6 +489,7 @@ def assign_notes_to_sets(sets,hw,book)
           s = $problem_assigned_on_set[p]
           text.gsub!(/\$\$/) {"#{ch}-#{num}"}
         end
+        if s.nil? then fatal_error("Error in note for problem #{t}, problem not assigned?") end
         if notes[s].nil? then notes[s]=[] end
         notes[s].push([p,text])
       }
@@ -514,22 +522,35 @@ def assign_starts_of_streams_to_sets(sets,hw)
 end
 
 def hw_table(args)
+  unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
+  tex = do_hw_table(args,{'partial'=>false})
+  File.open(args['out_file'],'w') { |f|
+    f.print tex
+  }
+end
+
+def do_hw_table(args,options)
   unless args.has_key?('in_file') then fatal_error("args do not contain in_file key: #{JSON.generate(args)}") end
   hw = get_hw_from_file_or_die(args['in_file'])
   unless args.has_key?('book') then fatal_error("args do not contain book key: #{JSON.generate(args)}") end
   book = args['book']
-  sets = hw_to_sets(hw,book)
+  if options.has_key?('sets') then sets=options['sets'] else sets = hw_to_sets(hw,book) end
+  partial = options.has_key?('partial') && options['partial']
+  lo = 1
+  hi = sets.length-1
+  if partial then lo=options['lo']; hi=options['hi'] end
 
-  unless args.has_key?('out_file') then fatal_error("args do not contain out_file key: #{JSON.generate(args)}") end
   tex = ''
-  tex = tex + <<-'TEX'
+  if !partial then
+    tex = tex + <<-'TEX'
          \documentclass{article}
          \usepackage[T1]{fontenc} % http://tex.stackexchange.com/questions/1774/how-to-insert-pipe-symbol-in-latex
          \begin{document}
          TEX
-  1.upto(sets.length-1) { |set_number|
+  end
+  lo.upto(hi) { |set_number|
     set = sets[set_number]
-    tex = tex + "\\noindent{\\textbf{Homework #{set_number}}}\\\\\n"
+    if !partial then tex = tex + "\\noindent{\\textbf{Homework #{set_number}}}\\\\\n" end
     c = points_possible_on_set(set,args)
     count_paper = c[[false,false]].to_s+"+"+c[[false,true]].to_s
     count_online = c[[true,false]].to_s+"+"+c[[true,true]].to_s
@@ -568,11 +589,10 @@ def hw_table(args)
       TEX
     if total_problems_on_this_set==0 then warning("no problems on assignment #{set_number}") end
   }
-  tex = tex + "\\end{document}\n"
-  File.open(args['out_file'],'w') { |f|
-    f.print tex
-  }
+  if !partial then tex = tex + "\\end{document}\n" end
+  return tex
 end
+
 
 # returns a hash whose keys are students' database keys, and whose
 # records are hashes with the keys last, first, class, id_string, and id_int
@@ -1794,8 +1814,11 @@ def fancy_solutions(args)
   sets = hw_to_sets(hw,book)
   stream_labels = assign_starts_of_streams_to_sets(sets,hw)
   out_file = require_arg(args,'out_file')
+  section = nil
+  if args.has_key?('section') then section=args['section'] end
   class_title = require_arg(args,'class_title')
-  sets = require_arg(args,'sets')
+  class_title = class_title_with_section(class_title,section)
+  sets_file = require_arg(args,'sets')
   if args.has_key?('gb_file') && !File.exist?(args['gb_file']) then
     warning("gradebook file #{args['gb_file']} doesn't exist, using fake roster containing only one student")
     args.delete('gb_file')
@@ -1822,12 +1845,12 @@ def fancy_solutions(args)
   header = true
   students_encountered = {}
   problem_labels_encountered = []
-  File.readlines(sets).each { |line|
+  File.readlines(sets_file).each { |line|
     if header then
       header = false
     else
       # set,book,ch,num,parts,flags,chunk,student
-      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets}: #{line}") end
+      unless line=~/(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)/ then fatal_error("illegal line in #{sets_file}: #{line}") end
       hw,ch,num,student = [$1.to_i,$3.to_i,$4,$8] # no to_i on num, could be "g7"
       if !per_student then student=fake_single_student_id end
       if hw>n_hw_defined then n_hw_defined=hw end
@@ -1844,14 +1867,21 @@ def fancy_solutions(args)
       probs["_instructor"][hw].push(l) unless probs["_instructor"][hw].include?(l) 
     end
   }
+  if !(probs["_instructor"].nil?) then # sort problems on instructor's copy
+    1.upto(n_hw_defined) { |hw|
+      if !(probs["_instructor"][hw].nil?) then
+        probs["_instructor"][hw].sort! {|l,m| spaceship_problem_label(l,m) }
+      end
+    }
+  end
   students_encountered.keys.each { |k|
     unless k=="_instructor" || roster.has_key?(k) then
-      fatal_error("student #{k} occurs in #{sets}, but not in #{gb_file}")
+      fatal_error("student #{k} occurs in #{sets_file}, but not in #{gb_file}")
     end
   }
   roster.keys.each { |k|
     unless k=="_instructor" || students_encountered.has_key?(k) then
-      fatal_error("student #{k} occurs in #{gb_file}, but not in #{sets}")
+      fatal_error("student #{k} occurs in #{gb_file}, but not in #{sets_file}")
     end
   }
   label_to_source_file = {}
@@ -1875,6 +1905,15 @@ def fancy_solutions(args)
   toc = ''
   tex = ''
   1.upto(n_hw_defined) { |hw|
+    list_students_with_no_hw = []
+    roster.keys.sort.each { |student|
+      if probs[student][hw].nil? then list_students_with_no_hw.push(student) end
+    }
+    if !(list_students_with_no_hw.empty?) then
+      warning("no problems assigned on hw #{hw} to #{list_students_with_no_hw.length} students")
+    end
+  }
+  1.upto(n_hw_defined) { |hw|
     figs_dir = ''
     toc = toc + "\\noindent Homework #{hw} ... \\pageref{set#{hw}}\\\\\n"
     first_student = true
@@ -1885,6 +1924,7 @@ def fancy_solutions(args)
       first_student = false
       wide_accum = '' # accumulate all wide material like force tables, which go at the bottom
       body = ''
+      next if probs[student][hw].nil?
       probs[student][hw].each { |label|
         p = $label_to_num[label]
         prob_num = p.join('-')
@@ -1922,9 +1962,11 @@ def fancy_solutions(args)
       else
         multicols = 'multicols*' # allow uneven columns
       end
+      instructor_copy = false
       if per_student then
         if student=="_instructor" then
           student_name = ", instructor's copy"
+          instructor_copy = true
         else
           student_name=", #{roster[student]["first"]} #{roster[student]["last"]}" 
         end
@@ -1937,7 +1979,12 @@ def fancy_solutions(args)
 
         % student = #{student}
         \\vfill\\clearpage\\onecolumn\\noindent%
-        {\\large\\textbf{Solutions to Homework #{hw}, #{class_title}#{student_name}}}#{label_for_toc}\\\\\n
+        {\\large\\textbf{Solutions to HW #{hw}, #{class_title}#{student_name}}}#{label_for_toc}\\\\\n
+      TEX
+      if instructor_copy then 
+        tex = tex + do_hw_table(args,{'partial'=>true,'lo'=>hw,'hi'=>hw,'sets'=>sets})
+      end
+      tex = tex + <<-"TEX"
         \\begin{#{multicols}}{2}
         #{body}
         \\end{#{multicols}}
