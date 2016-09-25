@@ -2000,7 +2000,8 @@ end
 # pull out material like force tables that is two columns wide and needs to go at the end
 def handle_wide_material(orig,convert_forcetablelmonly,problem_number)
   tex = orig.clone
-  tex.gsub!(/\\begin{forcesoln}{([^}]*)}{([^}]*)}{([^}]*)}/) {"See table below.\\begin{forcetable}{#{$3}}___#{$2}___"}
+  tex.gsub!(/\\begin{forcesoln}{([^}]*)}{([^}]*)}{([^}]*)}{([^}]*)}/) {"See table below.\\begin{forcetable}{#{$3}}___#{$2}___"}
+    # \begin{forcesoln}{}{}{farmer}{cowcrush}  ==>  \begin{forcetable}{farmer}
   tex.gsub!(/\\end{forcesoln}/) {"\\end{forcetable}"}
   if convert_forcetablelmonly then tex.gsub!(/forcetablelmonly/) {'forcetable'} end
   main = ''
