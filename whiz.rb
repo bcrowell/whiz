@@ -324,13 +324,13 @@ end
 def describe_individualization_group_simple(g)
   if g.length==1 then return g[0][0].to_s+'-'+describe_prob_and_parts(g[0]) end
   all_same_chapter = !(chapter_of_individualization_group(g).nil?)
+  u = g.clone
+  u.sort! {|a,b| spaceship_ch_and_num(a,b)}
   if all_same_chapter then
-    u = g.clone
-    u = u.sort {|a,b| a[1].to_i <=> b[1].to_i}
-    return g[0][0].to_s+'('+(u.map {|p| describe_prob_and_parts(p)}.join('|'))+')'
+    return u[0][0].to_s+'('+(u.map {|p| describe_prob_and_parts(p)}.join('|'))+')'
+  else
+    return '('+(u.map {|p| p[0].to_s+'-'+describe_prob_and_parts(p)}.join('|'))+')'
   end
-  if p[0]==1 && p[1]==13 then print "==== #{JSON.generate(p)}\n" end
-  return '('+(g.map {|p| p[0]+'-'+describe_prob_and_parts(p)}.join('|'))+')'
 end
 
 # format can be plain,tex,html
@@ -1185,7 +1185,7 @@ def groups(args)
             Students: <span id="nstudents"></span>
             Groups: <input type="text" value="#{default_ngroups}" size="2" id="ngroups">
             Rows: <input type="text" value="#{default_rows}" size="2" id="columns">
-            Labels: <input type="text" value="A" size="2" id="labels">
+            Labels: <input type="text" value="1" size="2" id="labels">
           </p>
           <p>
             <!-- http://stackoverflow.com/questions/2823733/textarea-onchange-detection -->

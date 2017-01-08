@@ -3,8 +3,6 @@ software
     ... library that handles the eruby embedded in syll.tex
   whiz
     ... does all the database manipulations
-  howdy
-    ... now only used for solutions
 hw.yaml
   edited by hand
   see sample_file for format and how it looks after being parsed and made into json
